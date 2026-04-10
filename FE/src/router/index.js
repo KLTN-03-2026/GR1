@@ -2,8 +2,13 @@ import { createRouter, createWebHistory } from "vue-router"; // cài vue-router:
 
 const routes = [
     {
-        path : '/',
-        component: ()=>import('../layout/wrapper/index.vue')
+        path: '/',
+        component: () => import('../layout/wrapper/index.vue')
+    },
+    {
+        path: "/tao-lich-trinh",
+        component: () => import("../pages/Client/TaoLichTrinh.vue"),
+        meta: { layout: "client" },
     },
 ]
 
