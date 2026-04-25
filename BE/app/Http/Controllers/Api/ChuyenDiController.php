@@ -45,6 +45,20 @@ class ChuyenDiController extends Controller
                 'message' => 'Không tìm thấy chuyến đi.'
             ], 404);
         }
+
+        $userId = auth('sanctum')->id();
+        $is_leader = false;
+        if ($chuyenDi->id_nhom_du_lich && $userId) {
+            $chiTietNhom = \App\Models\ChiTietNhom::where('id_nguoi_dung', $userId)
+                ->where('id_nhom_du_lich', $chuyenDi->id_nhom_du_lich)
+                ->first();
+            if ($chiTietNhom && $chiTietNhom->vai_tro === 'truong_nhom') {
+                $is_leader = true;
+            }
+        }
+
+        $chuyenDi->is_leader = $is_leader;
+
         return response()->json([
             'status' => 'success',
              'message' => 'Chi tiết chuyến đi.', 

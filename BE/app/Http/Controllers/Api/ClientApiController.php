@@ -171,7 +171,12 @@ class ClientApiController extends Controller
         }
 
         $is_leader = false;
-        if ($chuyenDi->id_nhom_du_lich && $userId) {
+        // Case 1: user is the trip owner
+        if ($userId && $chuyenDi->id_nguoi_dung == $userId) {
+            $is_leader = true;
+        }
+        // Case 2: user is the group leader
+        if (!$is_leader && $chuyenDi->id_nhom_du_lich && $userId) {
             $chiTietNhom = \App\Models\ChiTietNhom::where('id_nguoi_dung', $userId)
                 ->where('id_nhom_du_lich', $chuyenDi->id_nhom_du_lich)
                 ->first();
@@ -186,6 +191,33 @@ class ClientApiController extends Controller
             'status' => true,
             'data' => $chuyenDi
         ], 200);
+    }
+
+    public function chotLichTrinh($id)
+    {
+        $userId = auth('sanctum')->id();
+        $chuyenDi = ChuyenDi::find($id);
+
+        if (!$chuyenDi) {
+            return response()->json(['status' => false, 'message' => 'Không tìm thấy chuyến đi.'], 200);
+        }
+
+        if (!$chuyenDi->id_nhom_du_lich) {
+            return response()->json(['status' => false, 'message' => 'Chuyến đi không thuộc nhóm nào.'], 200);
+        }
+
+        $chiTietNhom = \App\Models\ChiTietNhom::where('id_nguoi_dung', $userId)
+            ->where('id_nhom_du_lich', $chuyenDi->id_nhom_du_lich)
+            ->first();
+
+        if (!$chiTietNhom || $chiTietNhom->vai_tro !== 'truong_nhom') {
+            return response()->json(['status' => false, 'message' => 'Chỉ trưởng nhóm mới có quyền chốt lịch trình.'], 200);
+        }
+
+        $chuyenDi->trang_thai = 2; // 2: Đã chốt
+        $chuyenDi->save();
+
+        return response()->json(['status' => true, 'message' => 'Đã chốt lịch trình thành công.']);
     }
 
     /**

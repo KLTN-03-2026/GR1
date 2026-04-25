@@ -73,6 +73,9 @@
                 <button class="btn-sm-brand" @click="openChatRoom(g)">
                   <i class="bi bi-chat-dots-fill me-1"></i>Trò chuyện
                 </button>
+                <button class="btn-sm-outline text-brand border-brand" @click="goToGroupItinerary(g)">
+                  <i class="bi bi-map-fill me-1"></i>Lịch trình
+                </button>
                 <button class="btn-sm-outline" @click="openMembersPanel(g)">
                   <i class="bi bi-person-lines-fill me-1"></i>Thành viên
                 </button>
@@ -115,6 +118,9 @@
               <div class="gc-actions">
                 <button class="btn-sm-brand" @click="openChatRoom(g)">
                   <i class="bi bi-chat-dots-fill me-1"></i>Trò chuyện
+                </button>
+                <button class="btn-sm-outline text-brand border-brand" @click="goToGroupItinerary(g)">
+                  <i class="bi bi-map-fill me-1"></i>Lịch trình
                 </button>
                 <button class="btn-sm-outline" @click="openMembersPanel(g)">
                   <i class="bi bi-person-lines-fill me-1"></i>Thành viên
@@ -473,6 +479,14 @@ export default {
 
     async openChatRoom(group) {
       this.$router.push(`/nhom-du-lich/${group.id}/chat`);
+    },
+
+    goToGroupItinerary(group) {
+      if (group.id_chuyen_di) {
+        window.location.href = `/lich-trinh/${group.id_chuyen_di}`;
+      } else {
+        this.$toast.warning('Trưởng nhóm chưa thiết lập lịch trình chính thức cho nhóm này.');
+      }
     },
 
     // ─── Fetch ───────────────────────────────────────────
@@ -997,8 +1011,12 @@ export default {
 }
 
 .btn-sm-brand:hover {
+  background: #0ea5e9;
   transform: translateY(-1px);
-  box-shadow: 0 6px 14px rgba(16, 185, 129, 0.3);
+}
+
+.border-brand {
+  border-color: #10b981 !important;
 }
 
 /* ─────────────── Loading / Empty ─────────────── */

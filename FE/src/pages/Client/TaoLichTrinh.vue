@@ -63,9 +63,17 @@
           </div>
 
           <div class="form-group full-col">
-            <label>Ghi chú</label>
-            <textarea v-model="form.chu_thich" class="tlt-input" rows="3"
-              placeholder="Sở thích, yêu cầu đặc biệt..."></textarea>
+            <label>Sở thích & Yêu cầu đặc biệt</label>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+              <span v-for="tag in noteSuggestionTags" :key="tag" 
+                    @click="toggleNoteTag(tag)" 
+                    class="note-tag badge rounded-pill px-3 py-2"
+                    :class="{ 'selected': selectedNoteTags.includes(tag) }">
+                {{ tag }}
+              </span>
+            </div>
+            <textarea v-model="chu_thich_custom" class="tlt-input" rows="2"
+              placeholder="Hoặc nhập yêu cầu khác của bạn tại đây..."></textarea>
           </div>
         </div>
 
@@ -576,6 +584,16 @@ export default {
         { value: 4, icon: '😊', label: 'Tốt', feedback: 'Tuyệt vời! Rất vui vì bạn hài lòng với trải nghiệm.' },
         { value: 5, icon: '🤩', label: 'Rất tốt', feedback: 'Cảm ơn bạn rất nhiều! Điều này thật sự truyền cảm hứng cho chúng tôi! 🚀' },
       ],
+
+      // Tags gợi ý
+      noteSuggestionTags: [
+        'Âm nhạc', 'Streetfood', 'Quán ăn ngon', 'Thích không gian yên tĩnh', 
+        'Đi cùng người cao tuổi', 'Có trẻ nhỏ', 'Ưu tiên tiết kiệm', 
+        'Di chuyển bằng taxi', 'Thích chụp ảnh sống ảo', 'Đam mê hải sản', 
+        'Khám phá văn hóa lịch sử', 'Du lịch nghỉ dưỡng'
+      ],
+      selectedNoteTags: [],
+      chu_thich_custom: '',
     };
   },
 
@@ -643,6 +661,11 @@ export default {
   },
 
   watch: {
+    selectedNoteTags: {
+      handler() { this.updateChuThich(); },
+      deep: true
+    },
+    chu_thich_custom() { this.updateChuThich(); },
     activeDayTab(newVal) {
       if (this.step === 3) {
         this.$nextTick(() => {
@@ -657,6 +680,17 @@ export default {
   },
 
   methods: {
+    toggleNoteTag(tag) {
+      if (this.selectedNoteTags.includes(tag)) {
+        this.selectedNoteTags = this.selectedNoteTags.filter(t => t !== tag);
+      } else {
+        this.selectedNoteTags.push(tag);
+      }
+    },
+    
+    updateChuThich() {
+      this.form.chu_thich = [...this.selectedNoteTags, this.chu_thich_custom].filter(Boolean).join('. ');
+    },
     async fetchMyGroups() {
       const token = localStorage.getItem('client_token');
       if (!token) return;
@@ -1026,7 +1060,7 @@ export default {
         if (res.status === 401) {
           localStorage.removeItem('client_token');
           localStorage.removeItem('client_user');
-          this.$toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+          this.$toast.error('Phiên đăng nhập đã hết hạn. V vui lòng đăng nhập lại.');
           this.loadingAI = false;
           this.aiStage = 0;
           return;
@@ -2814,5 +2848,31 @@ label {
 .fade-slide-leave-to {
   opacity: 0;
   transform: translateY(-8px);
+}
+
+/* Note Tags Styling */
+.note-tag {
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.85rem;
+  border: 1px solid #e2e8f0;
+  background-color: #ffffff;
+  color: #475569;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.note-tag:hover {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+}
+
+.note-tag.selected {
+  background: linear-gradient(135deg, #10b981, #059669) !important;
+  color: #ffffff !important;
+  border-color: transparent !important;
+  box-shadow: 0 4px 10px rgba(16, 185, 129, 0.25) !important;
+  transform: translateY(-2px) scale(1.05) !important;
 }
 </style>
