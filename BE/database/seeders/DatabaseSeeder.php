@@ -26,6 +26,7 @@ class DatabaseSeeder extends Seeder
             DashboardMockSeeder::class,
             DiaDiemYeuThichSeeder::class,
             DanhGiaHeThongSeeder::class,
+            ChiTietNhomSeeder::class,
         ]);
     }
 }
