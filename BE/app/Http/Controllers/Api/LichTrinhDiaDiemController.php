@@ -194,9 +194,12 @@ class LichTrinhDiaDiemController extends Controller
     public function reorder(Request $request)
     {
         $items = $request->input('items', []);
+        $chuyenDiId = null;
+
         foreach ($items as $item) {
             $lichTrinh = LichTrinhDiaDiem::find($item['id']);
             if ($lichTrinh) {
+                if (!$chuyenDiId) $chuyenDiId = $lichTrinh->id_chuyen_di;
                 $lichTrinh->thu_tu_tham_quan = $item['thu_tu'];
                 if (isset($item['gio_bat_dau'])) {
                     $lichTrinh->gio_bat_dau = $item['gio_bat_dau'];
@@ -207,6 +210,19 @@ class LichTrinhDiaDiemController extends Controller
                 $lichTrinh->save();
             }
         }
+
+        // Broadcast realtime update
+        if ($chuyenDiId) {
+            $chuyenDi = \App\Models\ChuyenDi::find($chuyenDiId);
+            if ($chuyenDi && $chuyenDi->id_nhom_du_lich) {
+                broadcast(new \App\Events\ItineraryReordered(
+                    $chuyenDi->id_nhom_du_lich,
+                    $chuyenDiId,
+                    ['message' => 'Manual reorder']
+                ))->toOthers();
+            }
+        }
+
         return response()->json([
             'status' => true,
             'message' => 'Cập nhật thứ tự thành công.'

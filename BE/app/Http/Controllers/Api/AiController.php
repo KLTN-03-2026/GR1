@@ -23,6 +23,92 @@ class AiController extends Controller
      * 1. Thuật toán: Phân tích sở thích (Content-based) + Sắp xếp quy tắc (Rule-based).
      * 2. AI: Tinh chỉnh nội dung và lời khuyên (Refinement).
      */
+    /**
+     * Tối ưu lại một lịch trình đã tồn tại.
+     * AI sẽ review thứ tự và thêm tips mà không thêm/xóa địa điểm.
+     */
+    public function reorderWithAi(Request $request, $id)
+    {
+        set_time_limit(180);
+        $chuyenDi = \App\Models\ChuyenDi::find($id);
+        if (!$chuyenDi) {
+            return response()->json(['status' => 'error', 'message' => 'Không tìm thấy chuyến đi.'], 404);
+        }
+
+        $apiKey = config('services.gemini.key');
+        if (!$apiKey) {
+            return response()->json(['status' => 'error', 'message' => 'Hệ thống AI chưa được cấu hình.'], 500);
+        }
+
+        // Lấy danh sách địa điểm hiện tại
+        $lichTrinhs = \App\Models\LichTrinhDiaDiem::where('id_chuyen_di', $id)
+            ->orderBy('thu_tu_tham_quan')
+            ->get();
+
+        if ($lichTrinhs->isEmpty()) {
+            return response()->json(['status' => 'error', 'message' => 'Lịch trình trống.'], 400);
+        }
+
+        // Build itinerary array in format expected by refineWithAi
+        $itineraryByDay = [];
+        foreach ($lichTrinhs as $lt) {
+            $dayIdx = floor(($lt->thu_tu_tham_quan - 1) / 100);
+            $diaDiem = \App\Models\DiaDiem::find($lt->id_dia_diem);
+            
+            $itineraryByDay[$dayIdx][] = [
+                'id' => $lt->id, // Chúng ta cần ID này để update ngược lại sau này
+                'id_dia_diem' => $lt->id_dia_diem ?? 'free_time_' . $lt->id,
+                'ten_dia_diem' => $diaDiem ? $diaDiem->ten_dia_diem : 'Thời gian tự do',
+                'gio' => $lt->gio_bat_dau,
+                'loai_dia_diem' => $diaDiem ? $diaDiem->loai_dia_diem : 'Nghỉ ngơi',
+                'thoi_luong_phut' => $lt->thoi_luong_phut
+            ];
+        }
+
+        $res = $this->refineWithAi($itineraryByDay, $chuyenDi->chu_thich ?? '', $apiKey);
+        $json = $res->getData(true);
+
+        if ($json['status'] === 'success' && !isset($json['is_technical_only'])) {
+            // Cập nhật lại vào DB
+            foreach ($json['data'] as $dayIdx => $dayItems) {
+                foreach ($dayItems as $pos => $item) {
+                    $lt = \App\Models\LichTrinhDiaDiem::find($item['id']);
+                    if ($lt) {
+                        $lt->thu_tu_tham_quan = $dayIdx * 100 + $pos + 1;
+                        $lt->gio_bat_dau = $item['gio_bat_dau'];
+                        $lt->gio_ket_thuc = $item['gio_ket_thuc'];
+                        $lt->thoi_luong_phut = $item['thoi_luong_phut'];
+                        
+                        // Lưu tips vào ghi chú (theo format của frontend)
+                        $cleanNote = explode('|AI_TIPS|', $lt->ghi_chu ?? '')[0];
+                        if (isset($item['travel_tips']) && !empty($item['travel_tips'])) {
+                            $lt->ghi_chu = $cleanNote . '|AI_TIPS|' . $item['travel_tips'];
+                        }
+                        
+                        $lt->save();
+                    }
+                }
+            }
+
+            // Broadcast realtime update
+            if ($chuyenDi->id_nhom_du_lich) {
+                broadcast(new \App\Events\ItineraryReordered(
+                    $chuyenDi->id_nhom_du_lich,
+                    $id,
+                    ['message' => 'AI reorder completed']
+                ))->toOthers();
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Lịch trình đã được AI tối ưu lại.',
+                'data' => $json['data']
+            ]);
+        }
+
+        return $res;
+    }
+
     public function generateItinerary(Request $request)
     {
         set_time_limit(180); // Tăng thời gian tối đa để tránh lỗi Timeout khi gọi AI

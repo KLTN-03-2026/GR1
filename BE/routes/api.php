@@ -56,6 +56,7 @@ Route::prefix('client')->group(function () {
     Route::post('/chuyen-di/delete', [\App\Http\Controllers\Api\ClientApiController::class, 'deleteChuyenDi'])->middleware('auth:sanctum');
     Route::post('/chi-tiet-chuyen-di/bulk-create', [\App\Http\Controllers\Api\ClientApiController::class, 'bulkCreateChiTiet'])->middleware('auth:sanctum');
     Route::post('/chuyen-di/{id}/chot-lich-trinh', [\App\Http\Controllers\Api\ClientApiController::class, 'chotLichTrinh'])->middleware('auth:sanctum');
+    Route::post('/chuyen-di/{id}/mo-lich-trinh', [\App\Http\Controllers\Api\ClientApiController::class, 'moLichTrinh'])->middleware('auth:sanctum');
     Route::get('/chuyen-di/{id}', [\App\Http\Controllers\Api\ClientApiController::class, 'getChiTietChuyenDi']);
 
     // API Nhóm du lịch
@@ -84,6 +85,7 @@ Route::prefix('client')->group(function () {
     // AI Features
     Route::prefix('ai')->middleware('auth:sanctum')->group(function () {
         Route::post('/generate-itinerary', [\App\Http\Controllers\Api\AiController::class, 'generateItinerary']);
+        Route::post('/reorder-itinerary/{id}', [\App\Http\Controllers\Api\AiController::class, 'reorderWithAi']);
     });
 
     // Đánh giá hệ thống (Client gửi sau khi lưu lịch trình – không bắt buộc đăng nhập)

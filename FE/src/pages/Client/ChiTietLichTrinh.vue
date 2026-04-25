@@ -29,8 +29,20 @@
             <button v-if="trip.is_leader && !isFinalized" class="btn btn-danger rounded-pill px-4 py-2 border-0 fw-bold shadow-sm d-flex align-items-center" @click="finalizeTrip">
               <i class="bi bi-lock-fill me-2"></i> Lưu & kết thúc
             </button>
+            <button v-if="trip.is_leader && isFinalized" class="btn btn-warning rounded-pill px-4 py-2 border-0 fw-bold shadow-sm d-flex align-items-center" @click="unfinalizeTrip">
+              <i class="bi bi-unlock-fill me-2"></i> Mở lại để sửa
+            </button>
             <button class="btn btn-outline-primary rounded-pill px-3 py-2 fw-bold d-flex align-items-center" @click="exportPDF">
               <i class="bi bi-file-earmark-pdf-fill me-2"></i> Xuất PDF
+            </button>
+            <!-- AI Optimization Button -->
+            <button v-if="!isFinalized && (trip.is_member || trip.is_owner)" 
+              class="btn btn-outline-dark rounded-pill px-3 py-2 fw-bold d-flex align-items-center" 
+              @click="reorderWithAi" 
+              :disabled="loadingAI">
+              <i v-if="loadingAI" class="spinner-border spinner-border-sm me-2"></i>
+              <i v-else class="bi bi-robot me-2 text-primary"></i>
+              AI Tối ưu lại
             </button>
             <button class="btn btn-primary rounded-pill px-4 py-2 border-0 fw-bold shadow-sm d-flex align-items-center position-relative overflow-hidden share-btn" @click="showShareModal = true" style="background: linear-gradient(135deg, #10b981, #0ea5e9);">
               <i class="bi bi-share-fill me-2"></i> Gửi vào nhóm
@@ -117,7 +129,7 @@
                   <span v-if="item.thoi_luong_phut" class="duration-badge">{{ item.thoi_luong_phut }}p</span>
                   <div class="timeline-line" v-if="idx < lichTrinhTheoNgay[activeDayTab - 1].length - 1"></div>
                 </div>
-                <div class="timeline-card" :style="isFinalized ? '' : 'cursor: grab;'" :title="isFinalized ? '' : 'Kéo thả để thay đổi thứ tự'">
+                <div class="timeline-card" :style="(!isFinalized && (trip.is_member || trip.is_owner)) ? 'cursor: grab;' : ''" :title="(!isFinalized && (trip.is_member || trip.is_owner)) ? 'Kéo thả để thay đổi thứ tự' : ''">
                   <div class="tc-header">
                     <div class="tc-img-wrap">
                       <img
@@ -131,7 +143,7 @@
                         <i class="bi bi-ticket-perforated me-1"></i>{{ formatCurrency(item.gia_ve) }} / người
                       </p>
                     </div>
-                    <div v-if="item.id_dia_diem && !isFinalized" class="ms-auto align-self-start">
+                    <div v-if="item.id_dia_diem && !isFinalized && (trip.is_member || trip.is_owner)" class="ms-auto align-self-start">
                         <button class="btn btn-sm btn-outline-primary rounded-circle shadow-sm" @click="swapPlace(item)" title="Đổi địa điểm khác" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
                             <i class="bi bi-arrow-repeat"></i>
                         </button>
@@ -425,6 +437,8 @@ export default {
 
       mapInstance: null,
       mapLayers: [],
+      loadingAI: false,
+      socketChannel: null,
     };
   },
 
@@ -491,6 +505,14 @@ export default {
       return;
     }
     await this.fetchTripData();
+    this.initSocket();
+  },
+  beforeUnmount() {
+    if (this.socketChannel) {
+        import('../../composables/useNhomChatSocket').then(({ getEcho }) => {
+            getEcho().leave(this.socketChannel);
+        });
+    }
   },
 
   methods: {
@@ -498,7 +520,9 @@ export default {
       this.loading = true;
       try {
         // Lấy chi tiết chuyến đi
-        const res = await fetch(`${BASE}/chuyen-dis/${this.tripId}`);
+        const res = await fetch(`${BASE}/chuyen-dis/${this.tripId}`, {
+          headers: { Authorization: `Bearer ${this.token}` }
+        });
         const json = await res.json();
         
         if (json.status === 'success' && json.data) {
@@ -506,7 +530,9 @@ export default {
           if(!this.trip.so_ngay) this.trip.so_ngay = 1;
 
           // Lấy danh sách địa điểm theo chuyến đi
-          const res2 = await fetch(`${BASE}/chuyen-di/${this.tripId}/dia-diems`);
+          const res2 = await fetch(`${BASE}/chuyen-di/${this.tripId}/dia-diems`, {
+            headers: { Authorization: `Bearer ${this.token}` }
+          });
           const json2 = await res2.json();
           this.rawPlaces = json2.data || [];
 
@@ -515,18 +541,37 @@ export default {
 
           // Lấy chi phí phát sinh
           await this.fetchExpenses();
-
-          this.$nextTick(() => {
-            this.initMap();
-            this.renderMapForDay(this.activeDayTab - 1);
-            // Wait for Sortable.js to finish loading before initializing
-            this.waitAndInitSortable();
-          });
         }
       } catch (e) {
         console.error("Lỗi khi tải chuyến đi:", e);
       } finally {
         this.loading = false;
+        this.$nextTick(() => {
+          this.initMap();
+          this.renderMapForDay(this.activeDayTab - 1);
+          this.waitAndInitSortable();
+        });
+      }
+    },
+
+    initSocket() {
+      if (!this.trip?.id_nhom_du_lich) return;
+      try {
+          // Import dynamic to avoid SSR/Initial load issues
+          import('../../composables/useNhomChatSocket').then(({ getEcho }) => {
+              const echo = getEcho();
+              const channelName = `nhom-chat.${this.trip.id_nhom_du_lich}`;
+              if (this.socketChannel) echo.leave(this.socketChannel);
+              
+              this.socketChannel = channelName;
+              echo.private(channelName).listen('.itinerary.reordered', (e) => {
+                  console.log('📡 Itinerary updated via socket:', e);
+                  this.$toast.info('Lịch trình đã được cập nhật bởi thành viên khác.');
+                  this.fetchTripData(); // Reload data
+              });
+          });
+      } catch(err) {
+          console.warn('Realtime socket not available');
       }
     },
 
@@ -753,6 +798,56 @@ export default {
         } catch (e) {
             this.$toast.error('Lỗi kết nối khi chốt lịch trình.');
         }
+    },
+
+    async unfinalizeTrip() {
+        if (!confirm('Bạn có muốn mở lại lịch trình để chỉnh sửa?')) return;
+        try {
+            const res = await fetch(`${BASE}/client/chuyen-di/${this.tripId}/mo-lich-trinh`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${this.token}` }
+            });
+            const data = await res.json();
+            if (data.status) {
+                this.$toast.success('Đã mở lại lịch trình. Các thành viên có thể tiếp tục chỉnh sửa.');
+                this.trip.trang_thai = 1; // update local state
+                // Re-init sortable since it might have been disabled
+                this.$nextTick(() => {
+                    this.waitAndInitSortable();
+                });
+            } else {
+                this.$toast.error(data.message || 'Lỗi mở lại lịch trình');
+            }
+        } catch (e) {
+            this.$toast.error('Lỗi kết nối khi mở lại lịch trình.');
+        }
+    },
+
+    async reorderWithAi() {
+      if (this.loadingAI) return;
+      this.loadingAI = true;
+      this.$toast.info('AI đang phân tích và tối ưu lại lịch trình của bạn...');
+
+      try {
+        const res = await fetch(`${BASE}/client/ai/reorder-itinerary/${this.tripId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.token}`
+          }
+        });
+        const json = await res.json();
+        if (json.status === 'success') {
+          this.$toast.success('AI đã tối ưu lại lịch trình thành công!');
+          await this.fetchTripData(); // Reload UI
+        } else {
+          this.$toast.error(json.message || 'Lỗi khi gọi AI');
+        }
+      } catch (err) {
+        this.$toast.error('Lỗi kết nối máy chủ.');
+      } finally {
+        this.loadingAI = false;
+      }
     },
 
     async swapPlace(item) {
@@ -1023,8 +1118,9 @@ export default {
     },
 
     initSortable() {
-      // Allow drag for all users as long as not finalized
-      if (this.isFinalized) return;
+      // Allow drag for members/owners as long as not finalized
+      const canEdit = !this.isFinalized && (this.trip.is_member || this.trip.is_owner);
+      if (!canEdit) return;
       const el = document.querySelector('.timeline');
       if (!el) return;
       if (!window.Sortable) {
@@ -1041,12 +1137,13 @@ export default {
         ghostClass: 'sortable-ghost',
         onEnd: async (evt) => {
           if (evt.oldIndex === evt.newIndex) return;
+
           const dayIdx = this.activeDayTab - 1;
           const dayItems = [...this.lichTrinhTheoNgay[dayIdx]];
-          const item = dayItems.splice(evt.oldIndex, 1)[0];
-          dayItems.splice(evt.newIndex, 0, item);
+          const movedItem = dayItems.splice(evt.oldIndex, 1)[0];
+          dayItems.splice(evt.newIndex, 0, movedItem);
 
-          // Tính lại giờ dựa trên Haversine
+          // Tính lại giờ dựa trên Haversine (giống bên Tạo lịch trình)
           const haversine = (lat1, lon1, lat2, lon2) => {
             if (!lat1 || !lon1 || !lat2 || !lon2) return 5;
             const R = 6371, dL = (lat2 - lat1) * Math.PI / 180, dN = (lon2 - lon1) * Math.PI / 180;
@@ -1055,11 +1152,9 @@ export default {
           };
           const fmt = m => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
 
-          let curMin = 6*60+30;
+          let curMin = 6*60+30; // Mặc định bắt đầu từ 6:30 sáng
           let prevLat = null, prevLng = null;
           
-          const apiPayload = [];
-
           dayItems.forEach((it, idx) => {
             const dur = it.thoi_luong_phut || 60;
             let travelMin = 12;
@@ -1077,51 +1172,48 @@ export default {
             curMin = endMin;
             prevLat = parseFloat(it.vi_do) || prevLat;
             prevLng = parseFloat(it.kinh_do) || prevLng;
-            
-            if(it.id) {
-              apiPayload.push({
-                  id: it.id,
-                  thu_tu: it.thu_tu_tham_quan,
-                  gio_bat_dau: it.gio_bat_dau,
-                  gio_ket_thuc: it.gio_ket_thuc
-              });
-            }
           });
 
           this.lichTrinhTheoNgay.splice(dayIdx, 1, dayItems);
           this.$nextTick(() => { this.renderMapForDay(dayIdx); });
           
-          if(apiPayload.length > 0) {
-            try {
-                this.$toast.info('Đang lưu thứ tự mới...');
-                const res = await fetch(`${BASE}/lich-trinh-dia-diems/reorder`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${this.token}`
-                    },
-                    body: JSON.stringify({ items: apiPayload })
-                });
-                const data = await res.json();
-                if (data.status) {
-                    this.$toast.success('Đã lưu thứ tự mới thành công!');
-                } else {
-                    this.$toast.error('Lỗi lưu thứ tự');
-                }
-            } catch(err) {
-                this.$toast.error('Lỗi khi gọi API');
-            }
+          // Save to DB
+          const apiPayload = dayItems.map(it => ({
+              id: it.id,
+              thu_tu: it.thu_tu_tham_quan,
+              gio_bat_dau: it.gio_bat_dau,
+              gio_ket_thuc: it.gio_ket_thuc
+          }));
+
+          try {
+              this.$toast.info('Đang cập nhật thứ tự...');
+              await fetch(`${BASE}/lich-trinh-dia-diems/reorder`, {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${this.token}`
+                  },
+                  body: JSON.stringify({ items: apiPayload })
+              });
+              
+              // AI tối ưu lại sau khi di chuyển
+              this.$toast.info('AI đang tối ưu lại lịch trình chuyên sâu...');
+              this.reorderWithAi(); 
+              
+          } catch(err) {
+              this.$toast.error('Lỗi khi lưu lịch trình');
           }
         }
       });
     },
 
     waitAndInitSortable() {
-      // Poll until Sortable.js is available (handles async script load)
+      // Poll until Sortable.js is available AND .timeline is in DOM
       const attempt = (tries = 0) => {
-        if (window.Sortable) {
+        const el = document.querySelector('.timeline');
+        if (window.Sortable && el) {
           this.initSortable();
-        } else if (tries < 20) {
+        } else if (tries < 30) {
           setTimeout(() => attempt(tries + 1), 200);
         }
       };

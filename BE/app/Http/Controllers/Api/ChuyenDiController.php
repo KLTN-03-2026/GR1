@@ -48,16 +48,25 @@ class ChuyenDiController extends Controller
 
         $userId = auth('sanctum')->id();
         $is_leader = false;
+        $is_member = false;
+        $is_owner = ($chuyenDi->id_nguoi_dung == $userId);
+
         if ($chuyenDi->id_nhom_du_lich && $userId) {
             $chiTietNhom = \App\Models\ChiTietNhom::where('id_nguoi_dung', $userId)
                 ->where('id_nhom_du_lich', $chuyenDi->id_nhom_du_lich)
+                ->where('trang_thai', 1)
                 ->first();
-            if ($chiTietNhom && $chiTietNhom->vai_tro === 'truong_nhom') {
-                $is_leader = true;
+            if ($chiTietNhom) {
+                $is_member = true;
+                if ($chiTietNhom->vai_tro === 'truong_nhom') {
+                    $is_leader = true;
+                }
             }
         }
 
         $chuyenDi->is_leader = $is_leader;
+        $chuyenDi->is_member = $is_member;
+        $chuyenDi->is_owner = $is_owner;
 
         return response()->json([
             'status' => 'success',
