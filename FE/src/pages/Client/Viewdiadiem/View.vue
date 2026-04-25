@@ -31,7 +31,6 @@
             <th>#</th>
             <th>Tên công việc</th>
             <th>Người phụ trách</th>
-            <th>Trạng thái</th>
           </tr>
         </thead>
 
