@@ -35,4 +35,18 @@ return [
         ],
     ],
 
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI'),
+    ],
+
+    'serpapi' => [
+        'key' => env('SERP_API_KEY', '68caa9575e20b9cff4b8584036033662965e7eafe884f807025788d5cb1ceea3'),
+    ],
+
+    'gemini' => [
+        'key' => env('GEMINI_API_KEY', 'AIzaSyBrmHJ43k2kXENX5rEO2bAYqMmN7tsVphQ'),
+    ],
+
 ];

@@ -170,6 +170,42 @@ class GiaiTriSeeder extends Seeder
                 'danh_gia_trung_binh' => 4.3, 'loai_dia_diem' => 'Mua sắm',
                 'image'        => 'https://danangfantasticity.com/wp-content/uploads/2017/06/bigc-da-nang-2.jpg',
             ],
+            [
+                'ten_dia_diem' => 'Chợ đêm Helio',
+                'mo_ta'        => 'Khu chợ đêm sầm uất với ẩm thực đa dạng, nhạc sống và nhiều trò chơi giải trí thú vị.',
+                'dia_chi'      => 'Đường 2/9, Hải Châu, Đà Nẵng',
+                'kinh_do'      => 108.2268, 'vi_do' => 16.0385,
+                'gia_ve'       => 0, 'gio_mo_cua' => '17:30', 'gio_dong_cua' => '22:30',
+                'danh_gia_trung_binh' => 4.6, 'loai_dia_diem' => 'Ngoài trời',
+                'image'        => 'https://helio.vn/media/upload/2020/09/23/cho-dem-helio-da-nang1.jpg',
+            ],
+            [
+                'ten_dia_diem' => 'Mikazuki Water Park 365',
+                'mo_ta'        => 'Công viên nước nóng trong nhà phong cách Nhật Bản, lớn nhất miền Trung.',
+                'dia_chi'      => 'Khu du lịch Xuân Thiều, Liên Chiểu, Đà Nẵng',
+                'kinh_do'      => 108.1360, 'vi_do' => 16.1030,
+                'gia_ve'       => 350000, 'gio_mo_cua' => '09:00', 'gio_dong_cua' => '20:00',
+                'danh_gia_trung_binh' => 4.7, 'loai_dia_diem' => 'Công viên',
+                'image'        => 'https://mikazuki.com.vn/vnt_upload/news/11_2020/water_park_3.jpg',
+            ],
+            [
+                'ten_dia_diem' => 'Công viên Suối khoáng nóng Núi Thần Tài',
+                'mo_ta'        => 'Công viên suối khoáng tự nhiên, tắm bùn, công viên nước và các hoạt động nghỉ dưỡng.',
+                'dia_chi'      => 'QL14G, Hòa Phú, Hòa Vang, Đà Nẵng',
+                'kinh_do'      => 107.9863, 'vi_do' => 15.9754,
+                'gia_ve'       => 450000, 'gio_mo_cua' => '08:30', 'gio_dong_cua' => '17:30',
+                'danh_gia_trung_binh' => 4.7, 'loai_dia_diem' => 'Công viên',
+                'image'        => 'https://nuithantai.vn/images/1572948756382-b1.jpg',
+            ],
+            [
+                'ten_dia_diem' => 'New Phương Đông Club',
+                'mo_ta'        => 'Vũ trường lâu đời và lớn nhất Đà Nẵng, âm thanh ánh sáng hiện đại bậc nhất.',
+                'dia_chi'      => '20 Đống Đa, Thuận Phước, Hải Châu, Đà Nẵng',
+                'kinh_do'      => 108.2165, 'vi_do' => 16.0792,
+                'gia_ve'       => 300000, 'gio_mo_cua' => '20:00', 'gio_dong_cua' => '03:00',
+                'danh_gia_trung_binh' => 4.5, 'loai_dia_diem' => 'Âm nhạc',
+                'image'        => 'https://top10danang.com/wp-content/uploads/2025/11/new-phuong-dong-club-da-nang.jpg',
+            ],
         ];
 
         foreach ($places as $placeData) {
