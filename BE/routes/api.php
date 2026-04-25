@@ -66,6 +66,7 @@ Route::prefix('client')->group(function () {
         // Route members phải đặt TRƯỚC /{id} để tránh conflict
         Route::get('/members/{id}', [\App\Http\Controllers\Api\ClientNhomDuLichController::class, 'getMembers']);
         Route::get('/{id}', [\App\Http\Controllers\Api\ClientNhomDuLichController::class, 'getGroup']);
+        Route::post('/{id}/set-lich-trinh', [\App\Http\Controllers\Api\ClientNhomDuLichController::class, 'setLichTrinhChinh']);
         Route::post('/create', [\App\Http\Controllers\Api\ClientNhomDuLichController::class, 'createGroup']);
         Route::post('/invite', [\App\Http\Controllers\Api\ClientNhomDuLichController::class, 'inviteMember']);
         Route::post('/accept-invite', [\App\Http\Controllers\Api\ClientNhomDuLichController::class, 'acceptInvite']);

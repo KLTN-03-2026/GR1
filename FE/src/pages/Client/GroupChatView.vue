@@ -24,6 +24,9 @@
             </div>
           </div>
           <div class="header-actions">
+            <button class="btn btn-sm btn-outline-primary rounded-pill me-3 fw-bold shadow-sm" @click="goToGroupItinerary" title="Xem lịch trình chính thức của nhóm">
+              <i class="bi bi-map-fill me-1"></i> Lịch trình nhóm
+            </button>
             <span class="text-muted small">{{ group.so_thanh_vien ? `${group.so_thanh_vien} thành viên` : '' }}</span>
           </div>
         </div>
@@ -70,15 +73,21 @@
                         </div>
                         <div>
                           <div class="fw-bold text-dark mb-1" style="font-size: 0.95rem; line-height: 1.2;">{{ extractItineraryData(msg.message).title }}</div>
-                          <div class="text-primary fw-semibold" style="font-size: 0.8rem;"><i class="bi bi-box-arrow-up-right me-1"></i>Xem chi tiết bản đồ</div>
+                          <div class="text-primary fw-semibold" style="font-size: 0.8rem;"><i class="bi bi-box-arrow-up-right me-1"></i>Xem chi tiết lịch trình</div>
                         </div>
                       </div>
-                      <div class="border-top p-2 text-center" v-if="isLeader && extractItineraryData(msg.message).id && tripStatuses[extractItineraryData(msg.message).id] !== 2">
-                        <button class="btn btn-sm btn-outline-danger rounded-pill fw-bold" @click.stop="finalizeTrip(extractItineraryData(msg.message).id)">
+                      <div class="border-top p-2 text-center" v-if="group.id_chuyen_di == extractItineraryData(msg.message).id">
+                        <span class="text-primary fw-bold small d-block mb-1 mt-1"><i class="bi bi-geo-alt-fill me-1"></i>Lịch trình chính thức của nhóm</span>
+                      </div>
+                      <div class="border-top p-2 text-center d-flex flex-column gap-2" v-if="isLeader && extractItineraryData(msg.message).id">
+                        <button v-if="group.id_chuyen_di != extractItineraryData(msg.message).id" class="btn btn-sm btn-outline-primary rounded-pill fw-bold" @click.stop="setGroupItinerary(extractItineraryData(msg.message).id)">
+                          <i class="bi bi-geo-alt-fill me-1"></i> Đặt làm lịch trình nhóm
+                        </button>
+                        <button v-if="tripStatuses[extractItineraryData(msg.message).id] !== 2" class="btn btn-sm btn-outline-danger rounded-pill fw-bold" @click.stop="finalizeTrip(extractItineraryData(msg.message).id)">
                           <i class="bi bi-lock-fill me-1"></i> Lưu & kết thúc lịch trình
                         </button>
                       </div>
-                      <div class="border-top p-2 text-center bg-light" v-else-if="extractItineraryData(msg.message).id && tripStatuses[extractItineraryData(msg.message).id] === 2">
+                      <div class="border-top p-2 text-center bg-light" v-else-if="extractItineraryData(msg.message).id && tripStatuses[extractItineraryData(msg.message).id] === 2 && (!isLeader)">
                         <span class="text-success fw-bold small"><i class="bi bi-check-circle-fill me-1"></i>Đã chốt lịch trình</span>
                       </div>
                     </div>
@@ -91,6 +100,25 @@
                       <div>
                         <div class="fw-bold text-dark mb-1" style="font-size: 0.95rem; line-height: 1.2;">{{ extractPlaceData(msg.message).title }}</div>
                         <div class="text-success fw-semibold" style="font-size: 0.8rem;"><i class="bi bi-geo-alt-fill me-1"></i>Địa điểm gợi ý</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="msg-bubble p-0 overflow-hidden" v-else-if="isLocationShare(msg.message)" style="background: transparent; border: none; box-shadow: none;">
+                    <div class="d-flex flex-column bg-white border rounded-4 shadow-sm iti-card">
+                      <div class="d-flex align-items-center gap-3 p-3 border-bottom">
+                        <div class="text-white rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px; background: #ef4444;">
+                          <i class="bi bi-pin-map-fill fs-5"></i>
+                        </div>
+                        <div>
+                          <div class="fw-bold text-dark mb-1" style="font-size: 0.95rem; line-height: 1.2;">Vị trí của tôi</div>
+                          <div class="text-danger fw-semibold" style="font-size: 0.75rem;">{{ extractLocationData(msg.message).lat.toFixed(4) }}, {{ extractLocationData(msg.message).lng.toFixed(4) }}</div>
+                        </div>
+                      </div>
+                      <div class="p-0 position-relative" style="height: 150px; background: #e5e7eb;">
+                        <img :src="`https://static-maps.yandex.ru/1.x/?lang=en-US&ll=${extractLocationData(msg.message).lng},${extractLocationData(msg.message).lat}&z=14&l=map&size=400,150&pt=${extractLocationData(msg.message).lng},${extractLocationData(msg.message).lat},pm2rdm`" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.src='https://via.placeholder.com/400x150?text=Map+Unavailable'" />
+                      </div>
+                      <div class="p-2 text-center bg-light">
+                        <a :href="`https://www.google.com/maps?q=${extractLocationData(msg.message).lat},${extractLocationData(msg.message).lng}`" target="_blank" class="text-decoration-none fw-bold small text-primary"><i class="bi bi-box-arrow-up-right me-1"></i>Mở trên Google Maps</a>
                       </div>
                     </div>
                   </div>
@@ -108,6 +136,10 @@
         <!-- INPUT -->
         <div class="chat-footer">
           <form @submit.prevent="handleSend" class="chat-form">
+            <button type="button" class="btn-location me-2" @click="sendLocation" :disabled="sending || locating" title="Gửi vị trí của tôi">
+              <i class="bi bi-geo-alt-fill text-danger fs-5" v-if="!locating"></i>
+              <span class="spinner-border spinner-border-sm text-danger" v-else></span>
+            </button>
             <input 
               v-model="draft" 
               type="text" 
@@ -124,6 +156,90 @@
         </div>
       </div>
     </div>
+    <!-- ══════════════════════════════════════════════
+         MODAL – Xác nhận đặt Lịch trình nhóm
+    ══════════════════════════════════════════════ -->
+    <transition name="rating-modal">
+      <div v-if="showConfirmModal" class="rating-modal-overlay" @click.self="showConfirmModal = false">
+        <div class="confirm-modal-box">
+          <div class="text-center mb-3">
+            <div style="width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,#10b981,#0ea5e9);display:flex;align-items:center;justify-content:center;margin:0 auto 1rem;">
+              <i class="bi bi-geo-alt-fill text-white fs-3"></i>
+            </div>
+            <h5 class="fw-bold text-dark mb-2">Đặt lịch trình chính thức</h5>
+            <p class="text-muted" style="font-size:0.95rem;">Bạn có muốn đặt lịch trình này làm <strong>lịch trình chính thức</strong> của nhóm? Mọi thành viên sẽ thấy được lịch trình này.</p>
+          </div>
+          <div class="d-flex gap-2 justify-content-end">
+            <button class="rm-btn-skip" @click="showConfirmModal = false">Hủy</button>
+            <button class="rm-btn-submit" @click="confirmSetItinerary" :disabled="confirmingSet">
+              <span v-if="confirmingSet"><i class="bi bi-hourglass-split me-1"></i>Đang xử lý...</span>
+              <span v-else><i class="bi bi-check2-circle me-1"></i>Xác nhận</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
+    <!-- ══════════════════════════════════════════════
+         MODAL – Đánh giá Hệ thống
+    ══════════════════════════════════════════════ -->
+    <transition name="rating-modal">
+      <div v-if="showRatingModal" class="rating-modal-overlay" @click.self="skipRating">
+        <div class="rating-modal-box">
+          <!-- Confetti particles -->
+          <div class="confetti-wrap">
+            <span v-for="n in 12" :key="n" class="confetti-dot" :style="confettiStyle(n)"></span>
+          </div>
+
+          <!-- Header -->
+          <div class="rm-header">
+            <div class="rm-success-icon">
+              <i class="bi bi-check-circle-fill"></i>
+            </div>
+            <h2 class="rm-title">🎉 Lịch trình đã được lưu!</h2>
+            <p class="rm-subtitle">Bạn cảm thấy thế nào về hệ thống lập lịch trình của chúng tôi?</p>
+          </div>
+
+          <!-- Face rating icons -->
+          <div class="rm-faces">
+            <button v-for="face in ratingFaces" :key="face.value" class="rm-face-btn"
+              :class="{ selected: selectedRating === face.value }" @click="selectedRating = face.value"
+              :title="face.label">
+              <span class="rm-face-emoji"></span>
+              <span class="rm-face-icon">{{ face.icon }}</span>
+              <span class="rm-face-label">{{ face.label }}</span>
+            </button>
+          </div>
+
+          <!-- Selected rating feedback text -->
+          <transition name="fade-slide">
+            <p v-if="selectedRating" class="rm-selected-text">
+              {{ratingFaces.find(f => f.value === selectedRating)?.feedback}}
+            </p>
+          </transition>
+
+          <!-- Feedback textarea -->
+          <div class="rm-feedback-wrap">
+            <label class="rm-feedback-label">
+              <i class="bi bi-chat-heart me-1"></i>Để lại đóng góp của bạn (không bắt buộc)
+            </label>
+            <textarea v-model="ratingFeedback" class="rm-textarea" rows="3"
+              placeholder="Ví dụ: Giao diện dễ dùng, AI gợi ý rất hữu ích..."></textarea>
+          </div>
+
+          <!-- Actions -->
+          <div class="rm-actions">
+            <button class="rm-btn-skip" @click="skipRating">
+              Bỏ qua
+            </button>
+            <button class="rm-btn-submit" :disabled="!selectedRating || submittingRating" @click="submitRating">
+              <span v-if="submittingRating"><i class="bi bi-hourglass-split me-1"></i>Đang gửi...</span>
+              <span v-else><i class="bi bi-send-fill me-1"></i>Gửi đánh giá</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -133,6 +249,7 @@ import { useRoute } from 'vue-router';
 import { useNhomChatSocket } from '../../composables/useNhomChatSocket';
 import { CLIENT_API_BASE_URL } from '../../services/clientApi';
 import { getClientAccessToken } from '../../utils/clientAuth';
+import { useToast } from 'vue-toast-notification';
 
 const route = useRoute();
 const groupId = route.params.id;
@@ -144,9 +261,16 @@ const error = ref('');
 const draft = ref('');
 const chatBody = ref(null);
 const inputField = ref(null);
+const locating = ref(false);
 
 const token = getClientAccessToken();
 const currentUserId = Number(localStorage.getItem('client_id') || 0);
+const toast = useToast();
+
+// Confirm modal for setGroupItinerary
+const showConfirmModal = ref(false);
+const confirmModalTripId = ref(null);
+const confirmingSet = ref(false);
 
 // Fetch group info
 const fetchGroupInfo = async () => {
@@ -256,12 +380,109 @@ const finalizeTrip = async (tripId) => {
         const data = await res.json();
         if (data.status) {
             tripStatuses.value[tripId] = 2; // mark as finalized
-            alert('Đã chốt lịch trình thành công!');
+            showRatingModal.value = true; // Show rating modal
         } else {
             alert(data.message);
         }
     } catch(err) {
         console.error(err);
+    }
+};
+
+// ── Rating Modal Variables ──
+const showRatingModal = ref(false);
+const selectedRating = ref(null);
+const ratingFeedback = ref('');
+const submittingRating = ref(false);
+const ratingFaces = [
+  { value: 1, icon: '😞', label: 'Rất tệ', feedback: 'Rất tiếc khi nghe điều này. Chúng tôi sẽ cố gắng cải thiện!' },
+  { value: 2, icon: '😕', label: 'Tệ', feedback: 'Cảm ơn bạn đã phản hồi. Ý kiến của bạn rất có giá trị!' },
+  { value: 3, icon: '😐', label: 'Bình thường', feedback: 'Cảm ơn! Chúng tôi đang nỗ lực để làm tốt hơn.' },
+  { value: 4, icon: '😊', label: 'Tốt', feedback: 'Tuyệt vời! Rất vui vì bạn hài lòng với trải nghiệm.' },
+  { value: 5, icon: '🤩', label: 'Rất tốt', feedback: 'Cảm ơn bạn rất nhiều! Điều này thật sự truyền cảm hứng cho chúng tôi! 🚀' },
+];
+
+const confettiStyle = (n) => {
+  const colors = ['#10b981', '#0ea5e9', '#f59e0b', '#f43f5e', '#8b5cf6', '#ec4899'];
+  const left = ((n - 1) * (100 / 12)) + '%';
+  const delay = (n * 0.15) + 's';
+  const color = colors[n % colors.length];
+  const size = (8 + (n % 4) * 4) + 'px';
+  return {
+    left,
+    animationDelay: delay,
+    background: color,
+    width: size,
+    height: size,
+    borderRadius: n % 2 === 0 ? '50%' : '3px',
+  };
+};
+
+const submitRating = async () => {
+  if (!selectedRating.value) return;
+  submittingRating.value = true;
+  try {
+    await fetch(`${CLIENT_API_BASE_URL}/client/danh-gia-he-thong`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        muc_do_hai_long: selectedRating.value,
+        noi_dung: ratingFeedback.value,
+      }),
+    }).catch(() => { });
+  } finally {
+    submittingRating.value = false;
+    showRatingModal.value = false;
+    toast.success('Cảm ơn bạn đã đánh giá hệ thống!', { position: 'top-right' });
+  }
+};
+
+const skipRating = () => {
+  showRatingModal.value = false;
+};
+
+const setGroupItinerary = (tripId) => {
+    if (!tripId) return;
+    confirmModalTripId.value = tripId;
+    showConfirmModal.value = true;
+};
+
+const confirmSetItinerary = async () => {
+    confirmingSet.value = true;
+    try {
+        const res = await fetch(`${CLIENT_API_BASE_URL}/client/nhom-du-lich/${groupId}/set-lich-trinh`, {
+            method: 'POST',
+            headers: { 
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ id_chuyen_di: confirmModalTripId.value })
+        });
+        const data = await res.json();
+        showConfirmModal.value = false;
+        if (data.status) {
+            group.value.id_chuyen_di = confirmModalTripId.value;
+            toast.success('Đã cập nhật lịch trình nhóm thành công!', { position: 'top-right' });
+        } else {
+            toast.error(data.message || 'Có lỗi xảy ra.', { position: 'top-right' });
+        }
+    } catch(err) {
+        console.error(err);
+        toast.error('Lỗi kết nối.', { position: 'top-right' });
+        showConfirmModal.value = false;
+    } finally {
+        confirmingSet.value = false;
+    }
+};
+
+const goToGroupItinerary = () => {
+    if (group.value.id_chuyen_di) {
+        window.location.href = `/lich-trinh/${group.value.id_chuyen_di}`;
+    } else {
+        toast.warning('Trưởng nhóm chưa thiết lập lịch trình chính thức cho nhóm này.', { position: 'top-right' });
     }
 };
 
@@ -366,6 +587,24 @@ const extractPlaceData = (text) => {
   return { title: '', image: '', id: '' };
 };
 
+const isLocationShare = (msg) => {
+  if (!msg) return false;
+  return msg.startsWith('[LOCATION_SHARE]');
+};
+
+const extractLocationData = (msg) => {
+  try {
+    const jsonStr = msg.replace('[LOCATION_SHARE]', '');
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    return { lat: 0, lng: 0 };
+  }
+};
+
+const openLink = (url) => {
+  if(url) window.location.href = url;
+};
+
 const extractItineraryData = (text) => {
   if (!text) return { title: '', link: '', id: null };
   if (typeof text === 'object' && text.type === 'itinerary') {
@@ -395,10 +634,6 @@ const extractItineraryData = (text) => {
   return { title: '', link: '', id: null };
 };
 
-const openLink = (url) => {
-  if(url) window.location.href = url;
-};
-
 const handleSend = async () => {
   const text = draft.value.trim();
   if (!text) return;
@@ -414,7 +649,7 @@ const handleSend = async () => {
   try {
     await sendMessage({
       id_chi_tiet_nhom: member.id_thanh_vien || member.id_chi_tiet_nhom,
-      message: text, // Sử dụng đúng syntax map cho Socket (message text)
+      message: text,
     });
     draft.value = '';
     scrollToBottom();
@@ -424,6 +659,30 @@ const handleSend = async () => {
   } catch (err) {
     console.error('Send failed:', err);
   }
+};
+
+const sendLocation = () => {
+  if (!navigator.geolocation) {
+    alert('Trình duyệt của bạn không hỗ trợ định vị.');
+    return;
+  }
+  locating.value = true;
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      locating.value = false;
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+      const payload = `[LOCATION_SHARE]${JSON.stringify({ lat, lng })}`;
+      sendMessage({
+        id_chi_tiet_nhom: members.value.find(m => Number(m.id_nguoi_dung) === currentUserId)?.id_thanh_vien,
+        message: payload
+      });
+    },
+    (error) => {
+      locating.value = false;
+      alert('Không thể lấy vị trí hiện tại. Vui lòng kiểm tra quyền truy cập.');
+    }
+  );
 };
 
 onMounted(async () => {
@@ -701,19 +960,29 @@ onMounted(async () => {
 
 .chat-form {
   display: flex;
-  gap: 1rem;
   align-items: center;
-  background: #ffffff;
-  padding: 0.5rem;
-  border-radius: 2.5rem;
-  box-shadow: 0 4px 15px rgba(15, 23, 42, 0.04);
-  border: 1px solid #e2e8f0;
-  transition: all 0.3s;
+  background: #f8f9fa;
+  border-radius: 2rem;
+  padding: 0.5rem 0.5rem 0.5rem 1rem;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
 }
 
-.chat-form:focus-within {
-  border-color: #10b981;
-  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1), 0 4px 15px rgba(15, 23, 42, 0.04);
+.btn-location {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.btn-location:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  transform: scale(1.05);
 }
 
 .chat-input {
@@ -805,5 +1074,281 @@ onMounted(async () => {
 .msg-mine .iti-card {
   border-color: rgba(255,255,255, 0.2) !important;
   background: rgba(255,255,255, 0.95) !important;
+}
+
+/* ══════════════════════════════════════════
+   Rating Modal
+   ══════════════════════════════════════════ */
+.rating-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 20, 40, 0.65);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 1rem;
+}
+
+.rating-modal-box {
+  background: #fff;
+  border-radius: 2rem;
+  padding: 2.5rem 2.2rem 2rem;
+  max-width: 540px;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 32px 80px rgba(10, 20, 60, 0.28);
+  animation: modalBounceIn 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.confirm-modal-box {
+  background: #fff;
+  border-radius: 1.5rem;
+  padding: 2rem 1.8rem 1.5rem;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 24px 60px rgba(10, 20, 60, 0.22);
+  animation: modalBounceIn 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes modalBounceIn {
+  from {
+    opacity: 0;
+    transform: scale(0.82) translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Confetti */
+.confetti-wrap {
+  position: absolute;
+  top: -6px;
+  left: 0;
+  width: 100%;
+  height: 60px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.confetti-dot {
+  position: absolute;
+  top: 0;
+  opacity: 0;
+  animation: confettiFall 1.4s ease-out forwards;
+}
+
+@keyframes confettiFall {
+  0% { opacity: 0; transform: translateY(-10px) rotate(0deg); }
+  20% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(72px) rotate(180deg); }
+}
+
+/* Header */
+.rm-header {
+  text-align: center;
+  margin-bottom: 1.8rem;
+}
+
+.rm-success-icon {
+  font-size: 3rem;
+  color: #10b981;
+  margin-bottom: 0.6rem;
+  animation: bounceScale 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s both;
+}
+
+@keyframes bounceScale {
+  from { transform: scale(0); }
+  to { transform: scale(1); }
+}
+
+.rm-title {
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: #1e2d44;
+  margin-bottom: 0.35rem;
+}
+
+.rm-subtitle {
+  font-size: 0.97rem;
+  color: #627289;
+  margin: 0;
+}
+
+/* Face buttons */
+.rm-faces {
+  display: flex;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.rm-face-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.7rem 0.9rem;
+  border: 2.5px solid #e2e8f0;
+  border-radius: 1.1rem;
+  background: #f8faff;
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+  min-width: 72px;
+}
+
+.rm-face-btn:hover {
+  border-color: #10b981;
+  background: #f0fdf8;
+  transform: translateY(-4px) scale(1.07);
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.18);
+}
+
+.rm-face-btn.selected {
+  border-color: #10b981;
+  background: linear-gradient(135deg, #d1fae5, #e0f2fe);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.25);
+  transform: translateY(-4px) scale(1.1);
+}
+
+.rm-face-icon {
+  font-size: 2rem;
+  line-height: 1;
+  transition: transform 0.2s;
+}
+
+.rm-face-btn:hover .rm-face-icon,
+.rm-face-btn.selected .rm-face-icon {
+  transform: scale(1.18);
+}
+
+.rm-face-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #5a7080;
+  white-space: nowrap;
+}
+
+.rm-face-btn.selected .rm-face-label {
+  color: #065f46;
+}
+
+/* Selected rating feedback text */
+.rm-selected-text {
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #065f46;
+  background: #d1fae5;
+  border-radius: 0.7rem;
+  padding: 0.55rem 1rem;
+  margin: 0 0 1.2rem;
+  animation: fadeUp 0.3s ease both;
+}
+
+/* Feedback textarea */
+.rm-feedback-wrap {
+  margin-bottom: 1.5rem;
+}
+
+.rm-feedback-label {
+  display: block;
+  font-size: 0.87rem;
+  font-weight: 600;
+  color: #3d5166;
+  margin-bottom: 0.4rem;
+}
+
+.rm-textarea {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1.5px solid #dbe3f0;
+  border-radius: 0.9rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+  color: #1e2d44;
+  background: #f8fbff;
+  resize: vertical;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+}
+
+.rm-textarea:focus {
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12);
+}
+
+/* Actions */
+.rm-actions {
+  display: flex;
+  gap: 0.8rem;
+  justify-content: flex-end;
+}
+
+.rm-btn-skip {
+  padding: 0.65rem 1.4rem;
+  border: 1.5px solid #dbe3f0;
+  border-radius: 0.9rem;
+  background: #fff;
+  color: #627289;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.rm-btn-skip:hover {
+  background: #f0f4f8;
+  border-color: #b0bec9;
+}
+
+.rm-btn-submit {
+  padding: 0.65rem 1.6rem;
+  border: none;
+  border-radius: 0.9rem;
+  background: linear-gradient(135deg, #10b981, #0ea5e9);
+  color: #fff;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.22s;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+}
+
+.rm-btn-submit:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(16, 185, 129, 0.38);
+}
+
+.rm-btn-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Transitions */
+.rating-modal-enter-active,
+.rating-modal-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.rating-modal-enter-from,
+.rating-modal-leave-to {
+  opacity: 0;
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.3s ease;
+}
+
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 </style>

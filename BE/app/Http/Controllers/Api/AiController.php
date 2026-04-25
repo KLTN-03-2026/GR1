@@ -226,9 +226,12 @@ QUY TẮC TÍNH GIỜ
 - Slot đầu tiên mỗi ngày giữ giờ ban đầu backend cung cấp
 
 =========================
-ƯU TIÊN NGƯỜI DÙNG
+ƯU TIÊN NGƯỜI DÙNG VÀ XỬ LÝ NGOẠI LỆ
 
 $userNotes
+
+CHÚ Ý QUAN TRỌNG VỀ GHI CHÚ:
+Nếu nội dung ƯU TIÊN NGƯỜI DÙNG phía trên là các từ khóa vô nghĩa, ký tự rác, hoặc không liên quan tới du lịch (ví dụ: chửi thề, test, asdasd, alo alo, đánh nhau), hãy BỎ QUA hoàn toàn phần ghi chú đó và tiếp tục lên lịch trình tiêu chuẩn bình thường. KHÔNG ĐƯỢC từ chối phục vụ hoặc trả lời lạc đề.
 
 =========================
 DỮ LIỆU LỊCH TRÌNH

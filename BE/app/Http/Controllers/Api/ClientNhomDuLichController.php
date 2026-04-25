@@ -296,4 +296,39 @@ class ClientNhomDuLichController extends Controller
             'message' => 'Đã giải tán nhóm thành công.',
         ]);
     }
+
+    public function setLichTrinhChinh(Request $request, $id)
+    {
+        $userId = $this->getCurrentUserId();
+        
+        $role = ChiTietNhom::where('id_nhom_du_lich', $id)
+            ->where('id_nguoi_dung', $userId)
+            ->where('trang_thai', 1)
+            ->value('vai_tro');
+
+        if ($role !== 'truong_nhom') {
+            return response()->json([
+                'status' => false,
+                'message' => 'Chỉ trưởng nhóm mới có quyền đổi lịch trình của nhóm.',
+            ], 403);
+        }
+
+        $idChuyenDi = $request->id_chuyen_di;
+
+        $nhom = NhomDuLich::find($id);
+        if (!$nhom) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Không tìm thấy nhóm.',
+            ], 404);
+        }
+
+        $nhom->id_chuyen_di = $idChuyenDi;
+        $nhom->save();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Đã cập nhật lịch trình nhóm thành công.',
+        ]);
+    }
 }
