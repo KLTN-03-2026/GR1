@@ -427,7 +427,7 @@ export default {
         })
         .catch((err) => {
           console.error(err);
-          this.$toast?.error('Không tìm thấy dữ liệu người dùng');
+          this.$toast?.error(err.response?.data?.message || 'Không tìm thấy dữ liệu người dùng');
         })
         .finally(() => {
           this.isLoading = false;

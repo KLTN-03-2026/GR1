@@ -79,14 +79,30 @@
           </span>
         </div>
 
-        <div class="tlt-actions d-flex gap-3">
-          <button class="btn-brand-lg flex-fill" @click="goStep2">
-            Tiếp tục – Chọn địa điểm <i class="bi bi-arrow-right ms-2"></i>
+        <!-- Weather Widget Removed per User Request -->
+        <div class="tlt-actions d-flex flex-column gap-3">
+          <button class="btn-brand-lg w-100" @click="goStep2">
+            Tiếp tục – Chọn địa điểm tự túc <i class="bi bi-arrow-right ms-2"></i>
           </button>
-          <button class="btn-outline-brand-lg flex-fill" @click="generateByAI" :disabled="loadingAI">
-            <span v-if="loadingAI" class="spinner-border spinner-border-sm me-2"></span>
-            <i v-else class="bi bi-magic me-2"></i> Tạo lịch bằng AI
-          </button>
+          <div class="ai-gen-wrapper">
+            <button class="btn-outline-brand-lg w-100" @click="generateByAI" :disabled="loadingAI">
+              <span v-if="loadingAI" class="spinner-border spinner-border-sm me-2"></span>
+              <i v-else class="bi bi-magic me-2"></i> Tạo lịch trình thông minh (Algorithm + AI)
+            </button>
+            <div v-if="loadingAI" class="ai-progress-status mt-3 p-3 rounded"
+              style="background: #f0f7ff; border: 1px solid #cce5ff;">
+              <h6 class="mb-2" style="color: #004085;"><i class="bi bi-cpu-fill me-2"></i>Đang xử lý hệ thống lai...
+              </h6>
+              <ul class="list-unstyled mb-0" style="font-size: 0.9rem;">
+                <li v-for="(log, i) in generationLog" :key="i" class="mb-1">
+                  <i class="bi bi-check2-circle text-success me-2"></i>{{ log }}
+                </li>
+                <li v-if="aiStage === 3" class="text-primary animate-pulse">
+                  <i class="bi bi-stars me-2"></i>Gemini AI đang hoàn thiện mô tả...
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -112,43 +128,6 @@
             <i class="bi bi-search"></i>
             <input v-model="searchQ" type="text" placeholder="Tìm địa điểm..." />
           </div>
-          <button v-if="searchQ.trim().length >= 2" class="btn-brand" @click="searchGoogle" :disabled="loadingSerp"
-            style="white-space: nowrap;">
-            <i class="bi" :class="loadingSerp ? 'bi-hourglass-split spin' : 'bi-google'"></i> Tìm trên Google Maps
-          </button>
-        </div>
-
-        <!-- SerpApi Loading -->
-        <div v-if="loadingSerp" class="tlt-loading">
-          <div class="spinner" style="border-top-color: #5a67d8;"></div>
-          <span>Đang tìm kiếm trên Google Maps...</span>
-        </div>
-
-        <!-- SerpApi Results -->
-        <div v-if="serpResults.length > 0" class="serp-results mb-4"
-          style="background: #f8fbff; padding: 1.5rem; border-radius: 1rem; border: 1px dashed #c3dafe;">
-          <h4 class="mb-3" style="color: #434190; font-size: 1.1rem; font-weight: 700;">
-            <i class="bi bi-google me-2"></i>Kết quả từ Google Maps
-          </h4>
-          <div class="dd-grid">
-            <div v-for="(res, i) in serpResults" :key="'serp' + i" class="dd-card">
-              <div class="dd-img-wrap">
-                <img :src="res.image || 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400'"
-                  class="dd-img" />
-                <button class="dd-select-btn" @click="importAndSchedule(res, i)" :disabled="importingId === i"
-                  style="background: #4c51bf;">
-                  <i class="bi" :class="importingId === i ? 'bi-hourglass-split spin' : 'bi-cloud-download'"></i> Lấy
-                </button>
-              </div>
-              <div class="dd-content">
-                <h3 class="dd-title">{{ res.ten_dia_diem }}</h3>
-                <p class="dd-desc"><i class="bi bi-geo-alt"></i> {{ res.dia_chi }}</p>
-                <div class="dd-meta" style="color: #ed8936;">⭐ {{ res.danh_gia_trung_binh || '4.0' }} / 5</div>
-              </div>
-            </div>
-          </div>
-          <button class="btn btn-outline-secondary w-100 mt-3 rounded-pill" @click="serpResults = []">Đóng kết quả
-            Google</button>
         </div>
 
         <!-- Loading -->
@@ -207,9 +186,20 @@
         <div class="section-head">
           <h2><i class="bi bi-calendar-week me-2 text-brand"></i>Lịch trình gợi ý</h2>
           <p>
-            Hệ thống đã sắp xếp <strong>{{ selectedDiaDiem.length }} địa điểm</strong> vào
-            <strong>{{ soNgay }} ngày</strong>. Bạn có thể điều chỉnh thứ tự và thêm ghi chú.
+            Hệ thống đã sắp xếp <strong>{{ tongSoDiaDiem }} địa điểm</strong> vào
+            <strong>{{ lichTrinhTheoNgay.length }} ngày</strong>. Bạn có thể điều chỉnh thứ tự và thêm ghi chú.
           </p>
+          <div class="alert alert-success d-inline-flex align-items-center py-2 px-3 mt-2 mb-0"
+            v-if="form.ngan_sach_du_kien > 0" style="border-radius: 20px;">
+            <i class="bi bi-piggy-bank me-2 fs-5"></i>
+            <span>
+              Chi phí dự kiến (<i class="bi bi-people-fill mx-1"></i>{{ form.so_luong_thanh_vien }} người):
+              <strong>{{ formatCurrency(tongChiPhiDuKien) }}</strong> /
+              Ngân sách: <strong>{{ formatCurrency(form.ngan_sach_du_kien) }}</strong>
+              <span v-if="tongChiPhiDuKien <= form.ngan_sach_du_kien">✅</span>
+              <span v-else class="text-danger">❌</span>
+            </span>
+          </div>
         </div>
 
         <!-- Budget tracker -->
@@ -236,6 +226,9 @@
             @click="activeDayTab = n">
             <span class="day-tab-num">Ngày {{ n }}</span>
             <span class="day-tab-date">{{ formatDate(form.ngay_bat_dau, n - 1) }}</span>
+            <span class="day-tab-cost text-success fw-bold d-block mt-1" style="font-size: 0.8rem;">
+              <i class="bi bi-cash-coin me-1"></i>{{ formatCurrency(chiPhiTheoNgay(n - 1)) }}
+            </span>
           </button>
         </div>
 
@@ -249,7 +242,9 @@
               <div v-for="(item, idx) in lichTrinhTheoNgay[activeDayTab - 1]" :key="item.id_dia_diem + '-' + idx"
                 class="timeline-item">
                 <div class="timeline-time">
-                  <span class="time-badge">{{ item.gio }}</span>
+                  <span class="time-badge">{{ item.gio_bat_dau || item.gio }}</span>
+                  <span v-if="item.gio_ket_thuc" class="time-end-badge">{{ item.gio_ket_thuc }}</span>
+                  <span v-if="item.thoi_luong_phut" class="duration-badge">{{ item.thoi_luong_phut }}p</span>
                   <div class="timeline-line" v-if="idx < lichTrinhTheoNgay[activeDayTab - 1].length - 1"></div>
                 </div>
                 <div class="timeline-card">
@@ -265,6 +260,12 @@
                       <p v-if="item.gia_ve > 0">
                         <i class="bi bi-ticket-perforated me-1"></i>{{ formatCurrency(item.gia_ve) }} / người
                       </p>
+                      <!-- Weather badge theo giờ -->
+                      <div v-if="getWeatherAtTime(activeDayTab - 1, item.gio_bat_dau || item.gio)" class="weather-inline-badge">
+                        <span class="wib-icon">{{ getWeatherAtTime(activeDayTab - 1, item.gio_bat_dau || item.gio).icon }}</span>
+                        <span class="wib-temp">{{ getWeatherAtTime(activeDayTab - 1, item.gio_bat_dau || item.gio).temp }}°C</span>
+                        <span class="wib-label">{{ getWeatherAtTime(activeDayTab - 1, item.gio_bat_dau || item.gio).label }}</span>
+                      </div>
                     </div>
                     <div class="tc-order-btns">
                       <button @click="moveItem(activeDayTab - 1, idx, -1)" :disabled="idx === 0" title="Lên">
@@ -283,6 +284,13 @@
                     <i class="bi bi-pencil-square me-1"></i>
                     <input v-model="item.ghi_chu" type="text" placeholder="Thêm ghi chú cho địa điểm này..."
                       class="note-input" />
+                  </div>
+                  <div v-if="item.travel_tips" class="tc-tips mt-2 p-2 rounded"
+                    style="background: #fff8e1; border-left: 3px solid #ffc107;">
+                    <small class="d-block mb-1 font-weight-bold" style="color: #856404;">
+                      <i class="bi bi-lightbulb-fill me-1"></i>Mẹo từ chuyên gia AI:
+                    </small>
+                    <span style="font-size: 0.85rem; color: #555;">{{ item.travel_tips }}</span>
                   </div>
                 </div>
               </div>
@@ -316,6 +324,9 @@
           <div></div>
           <div class="tlt-actions-row">
             <button class="btn-ghost" @click="step = 2"><i class="bi bi-arrow-left me-1"></i>Quay lại</button>
+            <button class="btn btn-outline-primary fw-bold px-4" style="border-radius: 99px; height: 3.2rem" @click="openShareModal">
+               <i class="bi bi-share-fill me-1"></i> Chia sẻ nhóm
+            </button>
             <button class="btn-brand-lg" @click="step = 4">
               Xem tóm tắt &amp; Lưu <i class="bi bi-check2-circle ms-2"></i>
             </button>
@@ -398,6 +409,97 @@
       </div>
 
     </div>
+
+    <!-- ═══════════════════════════════════════════
+         MODAL CHIA SẺ VÀO NHÓM
+         ═══════════════════════════════════════════ -->
+    <div v-if="showShareModal" class="rating-modal-overlay d-flex align-items-center justify-content-center" @click.self="showShareModal = false" style="z-index: 1000">
+      <div class="bg-white p-4 rounded-4 shadow-lg w-100 animate-in position-relative" style="max-width: 440px;">
+        <button class="btn-close position-absolute top-0 end-0 m-4" @click="showShareModal = false"></button>
+        <div class="text-center mb-4 mt-2">
+          <div class="mb-3 mx-auto shadow-sm" style="width:55px; height:55px; background: #10b981; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+             <i class="bi bi-send-check-fill fs-3 text-white"></i>
+          </div>
+          <h5 class="fw-bold mb-1 text-dark">Lưu & Chia sẻ lịch trình</h5>
+          <p class="text-muted mb-0" style="font-size: 0.9rem;">Chọn nhóm để gửi chuyến đi này nhé!</p>
+        </div>
+        
+        <div class="form-group mb-4">
+          <label class="fw-bold mb-2 text-dark" style="font-size: 0.9rem;">Bạn muốn gửi vào nhóm nào?</label>
+          <select v-model="form.id_nhom_du_lich" class="form-select border-2 shadow-none modal-select text-dark" style="padding: 0.8rem 1rem; border-radius: 12px; font-weight: 500; cursor: pointer; border-color: #e2e8f0; background-color: #f8fafc;">
+            <option :value="null">-- Click để chọn nhóm --</option>
+            <option v-for="g in myJoinedGroups" :key="g.id" :value="g">{{ g.ten_nhom }}</option>
+          </select>
+        </div>
+
+        <button class="btn w-100 rounded-pill fw-bold text-white shadow-sm mt-2" @click="confirmShare" :disabled="!form.id_nhom_du_lich || saving" style="background: #10b981; padding: 0.8rem; font-size: 1rem; transition: all 0.2s;">
+          <span v-if="saving" class="d-flex align-items-center justify-content-center"><span class="spinner-border spinner-border-sm me-2"></span> Đang lưu và gửi...</span>
+          <span v-else class="d-flex align-items-center justify-content-center"><i class="bi bi-chat-heart-fill me-2 fs-5"></i> Chia sẻ ngay</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════
+         MODAL ĐÁNH GIÁ MỨC ĐỘ HÀI LÒNG
+         ═══════════════════════════════════════════ -->
+    <transition name="rating-modal">
+      <div v-if="showRatingModal" class="rating-modal-overlay" @click.self="skipRating">
+        <div class="rating-modal-box">
+          <!-- Confetti particles -->
+          <div class="confetti-wrap">
+            <span v-for="n in 12" :key="n" class="confetti-dot" :style="confettiStyle(n)"></span>
+          </div>
+
+          <!-- Header -->
+          <div class="rm-header">
+            <div class="rm-success-icon">
+              <i class="bi bi-check-circle-fill"></i>
+            </div>
+            <h2 class="rm-title">🎉 Lịch trình đã được lưu!</h2>
+            <p class="rm-subtitle">Bạn cảm thấy thế nào về hệ thống lập lịch trình của chúng tôi?</p>
+          </div>
+
+          <!-- Face rating icons -->
+          <div class="rm-faces">
+            <button v-for="face in ratingFaces" :key="face.value" class="rm-face-btn"
+              :class="{ selected: selectedRating === face.value }" @click="selectedRating = face.value"
+              :title="face.label">
+              <span class="rm-face-emoji"></span>
+              <span class="rm-face-icon">{{ face.icon }}</span>
+              <span class="rm-face-label">{{ face.label }}</span>
+            </button>
+          </div>
+
+          <!-- Selected rating feedback text -->
+          <transition name="fade-slide">
+            <p v-if="selectedRating" class="rm-selected-text">
+              {{ratingFaces.find(f => f.value === selectedRating)?.feedback}}
+            </p>
+          </transition>
+
+          <!-- Feedback textarea -->
+          <div class="rm-feedback-wrap">
+            <label class="rm-feedback-label">
+              <i class="bi bi-chat-heart me-1"></i>Để lại đóng góp của bạn (không bắt buộc)
+            </label>
+            <textarea v-model="ratingFeedback" class="rm-textarea" rows="3"
+              placeholder="Ví dụ: Giao diện dễ dùng, AI gợi ý rất hữu ích..."></textarea>
+          </div>
+
+          <!-- Actions -->
+          <div class="rm-actions">
+            <button class="rm-btn-skip" @click="skipRating">
+              Bỏ qua
+            </button>
+            <button class="rm-btn-submit" :disabled="!selectedRating || submittingRating" @click="submitRating">
+              <span v-if="submittingRating"><i class="bi bi-hourglass-split me-1"></i>Đang gửi...</span>
+              <span v-else><i class="bi bi-send-fill me-1"></i>Gửi đánh giá</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </transition>
+
   </div>
 </template>
 
@@ -415,7 +517,6 @@ export default {
 
       today: new Date().toISOString().split('T')[0],
 
-      // ── Form bước 1 ──
       form: {
         ten_chuyen_di: '',
         ngay_bat_dau: '',
@@ -423,8 +524,11 @@ export default {
         so_luong_thanh_vien: 2,
         ngan_sach_du_kien: 0,
         chu_thich: '',
+        id_nhom_du_lich: null,
       },
       errors: {},
+
+      myJoinedGroups: [],
 
       // ── Địa điểm ──
       allDiaDiem: [],
@@ -434,10 +538,7 @@ export default {
       categories: [],
       searchQ: '',
 
-      // ── SerpApi ──
-      loadingSerp: false,
-      serpResults: [],
-      importingId: null,
+
 
       // ── Lịch trình ──
       lichTrinhTheoNgay: [], // Array<Array<item>>
@@ -453,6 +554,28 @@ export default {
       mapLayers: [],
 
       loadingAI: false,
+      aiStage: 0, // 0: Idle, 1: Filtering, 2: Scheduling, 3: AI Refinement
+      generationLog: [],
+
+      // ── Thời tiết ──
+      weatherForecast: [],
+      weatherHourly: {}, // { 'YYYY-MM-DD': { '09': { temp, icon, label }, ... } }
+      loadingWeather: false,
+
+      showShareModal: false,
+
+      // ── Rating Modal ──
+      showRatingModal: false,
+      selectedRating: null,
+      ratingFeedback: '',
+      submittingRating: false,
+      ratingFaces: [
+        { value: 1, icon: '😞', label: 'Rất tệ', feedback: 'Rất tiếc khi nghe điều này. Chúng tôi sẽ cố gắng cải thiện!' },
+        { value: 2, icon: '😕', label: 'Tệ', feedback: 'Cảm ơn bạn đã phản hồi. Ý kiến của bạn rất có giá trị!' },
+        { value: 3, icon: '😐', label: 'Bình thường', feedback: 'Cảm ơn! Chúng tôi đang nỗ lực để làm tốt hơn.' },
+        { value: 4, icon: '😊', label: 'Tốt', feedback: 'Tuyệt vời! Rất vui vì bạn hài lòng với trải nghiệm.' },
+        { value: 5, icon: '🤩', label: 'Rất tốt', feedback: 'Cảm ơn bạn rất nhiều! Điều này thật sự truyền cảm hứng cho chúng tôi! 🚀' },
+      ],
     };
   },
 
@@ -477,6 +600,7 @@ export default {
       script.src = 'https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js';
       document.head.appendChild(script);
     }
+    this.fetchMyGroups();
   },
 
   computed: {
@@ -511,6 +635,11 @@ export default {
     tongSoDiaDiem() {
       return this.lichTrinhTheoNgay.flat().length;
     },
+    tongChiPhiDuKien() {
+      return this.lichTrinhTheoNgay.flat().reduce((sum, item) => {
+        return sum + (Number(item.gia_ve) || 0) * (this.form.so_luong_thanh_vien || 1);
+      }, 0);
+    }
   },
 
   watch: {
@@ -522,13 +651,82 @@ export default {
         });
       }
     },
+    // Auto-fetch thời tiết khi user thay đổi ngày
+    'form.ngay_bat_dau'() { this.autoLoadWeather(); },
+    'form.ngay_ket_thuc'() { this.autoLoadWeather(); },
   },
 
   methods: {
+    async fetchMyGroups() {
+      const token = localStorage.getItem('client_token');
+      if (!token) return;
+      try {
+        const [joinedRes, ownedRes] = await Promise.all([
+          fetch(`${BASE}/client/nhom-du-lich/get-joined`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${BASE}/client/nhom-du-lich/get-my-groups`, { headers: { Authorization: `Bearer ${token}` } })
+        ]);
+        const jData = await joinedRes.json();
+        const oData = await ownedRes.json();
+        
+        const groups = [];
+        if (jData.status && jData.data) groups.push(...jData.data);
+        if (oData.status && oData.data) groups.push(...oData.data);
+        
+        this.myJoinedGroups = groups;
+      } catch (e) {
+        console.error("Lỗi lấy danh sách nhóm", e);
+      }
+    },
     // ─── Utilities ───────────────────────────────
+    chiPhiTheoNgay(dayIndex) {
+      if (!this.lichTrinhTheoNgay[dayIndex]) return 0;
+      return this.lichTrinhTheoNgay[dayIndex].reduce((sum, item) => {
+        return sum + (Number(item.gia_ve) || 0) * (this.form.so_luong_thanh_vien || 1);
+      }, 0);
+    },
     formatCurrency(val) {
       if (!val) return '0đ';
       return Number(val).toLocaleString('vi-VN') + 'đ';
+    },
+
+    formatWeatherDate(dateStr) {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' });
+    },
+    weatherIcon(condition) {
+      const map = { sunny: '☀️', partly_cloudy: '⛅', rain: '🌧️', cloudy: '☁️' };
+      return map[condition] || '🌤';
+    },
+    weatherLabel(condition) {
+      const map = { sunny: 'Nắng đẹp', partly_cloudy: 'Ít mây', rain: 'Có mưa', cloudy: 'Nhiều mây' };
+      return map[condition] || 'Không rõ';
+    },
+    weatherTip(condition, temp) {
+      if (condition === 'rain') return 'Ưu tiên cafe, bảo tàng';
+      if (condition === 'sunny' && temp >= 35) return 'Tránh biển trưa, mang kem chống nắng';
+      if (condition === 'sunny') return 'Tuyệt vời cho biển & check-in';
+      if (condition === 'partly_cloudy') return 'Thời tiết dễ chịu';
+      return 'Mang áo khoác nhẹ';
+    },
+
+    async autoLoadWeather() {
+      if (!this.form.ngay_bat_dau || !this.form.ngay_ket_thuc) return;
+      if (this.form.ngay_ket_thuc < this.form.ngay_bat_dau) return;
+      this.loadingWeather = true;
+      const result = await this.fetchWeatherData();
+      this.weatherForecast = result.daily;
+      this.weatherHourly   = result.hourly;
+      this.loadingWeather = false;
+    },
+
+    // Trả về thời tiết tại khung giờ cụ thể của ngày trong lịch trình
+    getWeatherAtTime(dayIndex, timeStr) {
+      if (!timeStr || !this.form.ngay_bat_dau) return null;
+      const d = new Date(this.form.ngay_bat_dau);
+      d.setDate(d.getDate() + dayIndex);
+      const dateKey = d.toISOString().split('T')[0];
+      const hourKey = (timeStr || '').substring(0, 2); // Lấy 2 chữ số giờ
+      return this.weatherHourly?.[dateKey]?.[hourKey] || null;
     },
 
     formatDate(baseDate, addDays) {
@@ -551,67 +749,7 @@ export default {
       }
     },
 
-    // ─── SerpApi Google Maps ───────────────────────
-    async searchGoogle() {
-      if (!this.searchQ.trim()) return;
-      this.loadingSerp = true;
-      this.serpResults = [];
-      try {
-        const res = await fetch(`http://localhost:8000/api/serp/search?query=${encodeURIComponent(this.searchQ)}`);
-        const json = await res.json();
-        if (json.status) {
-          this.serpResults = json.data || [];
-          if (this.serpResults.length === 0) {
-            alert('Không tìm thấy kết quả nào mới trên Google Maps.');
-          }
-        }
-      } catch (e) {
-        alert('Lỗi khi gọi API Google Maps: ' + e.message);
-      } finally {
-        this.loadingSerp = false;
-      }
-    },
 
-    async importAndSchedule(googlePlace, index) {
-      this.importingId = index;
-
-      const payload = {
-        ten_dia_diem: googlePlace.ten_dia_diem,
-        dia_chi: googlePlace.dia_chi,
-        vi_do: googlePlace.vi_do,
-        kinh_do: googlePlace.kinh_do,
-        danh_gia_trung_binh: googlePlace.danh_gia_trung_binh,
-        image: googlePlace.image,
-        mo_ta: googlePlace.mo_ta || 'Được thêm tự động từ Google Maps.',
-        loai_dia_diem: 'Điểm check-in',
-        id_danh_muc: 2,
-      };
-
-      try {
-        const res = await fetch(`http://localhost:8000/api/serp/import`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const json = await res.json();
-
-        if (!json.status && json.message === 'Địa điểm này đã tồn tại trong hệ thống.') {
-          await this.fetchDiaDiem();
-          alert('Địa điểm này đã có trong hệ thống nội bộ của chúng tôi! Bạn hãy tìm nó ngay bên dưới.');
-          return;
-        }
-
-        if (json.status && json.data) {
-          this.allDiaDiem.unshift(json.data);
-          this.toggleSelect(json.data);
-          this.serpResults.splice(index, 1);
-        }
-      } catch (e) {
-        alert('Lỗi hệ thống khi tải địa điểm này: ' + e.message);
-      } finally {
-        this.importingId = null;
-      }
-    },
 
     // ─── Validation bước 1 ───────────────────────
     validateStep1() {
@@ -674,43 +812,166 @@ export default {
         return;
       }
 
-      // Sắp xếp theo giờ mở cửa (ưu tiên sáng sớm lên trước)
-      const sorted = [...this.selectedDiaDiem].sort((a, b) => {
-        const ta = a.gio_mo_cua || '10:00';
-        const tb = b.gio_mo_cua || '10:00';
-        return ta.localeCompare(tb);
-      });
+      // ── Hàm Haversine tính khoảng cách (km) ──
+      const haversine = (lat1, lon1, lat2, lon2) => {
+        if (!lat1 || !lon1 || !lat2 || !lon2) return 8;
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) ** 2 +
+          Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      };
 
-      // Khung giờ mặc định mỗi slot trong ngày
-      const timeSlots = ['08:00', '10:30', '13:30', '16:00', '19:00'];
+      // ── Phân loại slot theo từng loại địa điểm ──
+      const SLOT_CONFIGS = [
+        { key: 'breakfast', time: '07:00', dur: 35,  label: 'Ăn sáng',         kw: ['bún', 'phở', 'mì', 'bánh mì', 'xôi', 'cháo', 'ăn sáng', 'quán ăn sáng'] },
+        { key: 'cafe',      time: '08:00', dur: 45,  label: 'Cafe/Check-in',    kw: ['cafe', 'cà phê', 'check-in', 'sống ảo'] },
+        { key: 'morning',   time: '09:30', dur: 100, label: 'Tham quan sáng',   kw: ['biển', 'chùa', 'bảo tàng', 'di tích', 'tâm linh', 'công viên', 'tham quan', 'vui chơi'] },
+        { key: 'lunch',     time: '12:00', dur: 55,  label: 'Ăn trưa',          kw: ['nhà hàng', 'cơm', 'hải sản', 'quán ăn', 'đặc sản'] },
+        { key: 'afternoon', time: '14:30', dur: 100, label: 'Tham quan chiều',  kw: ['biển', 'chùa', 'bảo tàng', 'di tích', 'công viên', 'tham quan', 'vui chơi'] },
+        { key: 'snack',     time: '16:30', dur: 35,  label: 'Ăn vặt chiều',    kw: ['kem', 'chè', 'trà sữa', 'bánh ngọt', 'ăn vặt'] },
+        { key: 'dinner',    time: '18:00', dur: 70,  label: 'Ăn tối',           kw: ['nhà hàng', 'hải sản', 'lẩu', 'nướng', 'bbq', 'ẩm thực'] },
+        { key: 'pub',       time: '19:30', dur: 75,  label: 'Quán nhậu/Streetfood', kw: ['nhậu', 'bia', 'quán nhậu', 'streetfood', 'ăn vặt', 'hải sản vỉa hè'] },
+        { key: 'night',     time: '21:00', dur: 60,  label: 'Dạo tối',          kw: ['cầu', 'chợ đêm', 'phố đi bộ', 'bar', 'pub', 'acoustic', 'giải trí đêm'] },
+      ];
 
-      // Khởi tạo array ngày
+      const matchScore = (place, kws) => {
+        const meta = ((place.ten_dia_diem || '') + ' ' + (place.loai_dia_diem || '') + ' ' + (place.mo_ta || '')).toLowerCase();
+        return kws.some(k => meta.includes(k)) ? 1 : 0;
+      };
+
+      // ── Phân chia địa điểm vào slots theo loại ──
       const schedule = Array.from({ length: days }, () => []);
+      const used = new Set();
 
-      // Phân bổ tròn (round-robin theo ngày)
-      sorted.forEach((dd, i) => {
+      const centerDaNang = { vi_do: 16.0544, kinh_do: 108.2022 };
+
+      for (let d = 0; d < days; d++) {
+        let curLat = centerDaNang.vi_do;
+        let curLng = centerDaNang.kinh_do;
+        let curMin = 6 * 60 + 30; // 06:30
+
+        for (const slot of SLOT_CONFIGS) {
+          // Tìm địa điểm phù hợp nhất (chưa dùng, gần nhất, đúng loại)
+          let best = null, bestScore = -Infinity;
+
+          for (const dd of this.selectedDiaDiem) {
+            if (used.has(dd.id)) continue;
+            const dist = haversine(curLat, curLng, parseFloat(dd.vi_do) || curLat, parseFloat(dd.kinh_do) || curLng);
+            const match = matchScore(dd, slot.kw);
+            const sc = match * 50 - dist * 5;
+            if (sc > bestScore) { bestScore = sc; best = dd; }
+          }
+
+          if (!best) continue;
+          used.add(best.id);
+
+          // Tính giờ bắt đầu thực tế (sau điểm trước + thời gian di chuyển)
+          const dist = haversine(curLat, curLng, parseFloat(best.vi_do) || curLat, parseFloat(best.kinh_do) || curLng);
+          const travelMin = Math.max(5, Math.min(40, Math.ceil(dist / 20 * 60) + 5));
+          const slotMin   = slot.time.split(':').reduce((a, b, i) => i === 0 ? +b * 60 : a + +b, 0);
+          const startMin  = Math.max(slotMin, curMin + travelMin);
+          const endMin    = startMin + slot.dur;
+          const fmt = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+
+          schedule[d].push({
+            id_dia_diem:     best.id,
+            ten_dia_diem:    best.ten_dia_diem,
+            dia_chi:         best.dia_chi,
+            hinh_anh:        best.hinh_anh,
+            gia_ve:          best.gia_ve || 0,
+            gio:             fmt(startMin),
+            gio_bat_dau:     fmt(startMin),
+            gio_ket_thuc:    fmt(endMin),
+            thoi_luong_phut: slot.dur,
+            ghi_chu:         '',
+            vi_do:           best.vi_do || null,
+            kinh_do:         best.kinh_do || null,
+          });
+
+          curLat = parseFloat(best.vi_do) || curLat;
+          curLng = parseFloat(best.kinh_do) || curLng;
+          curMin = endMin;
+        }
+      }
+
+      // Địa điểm còn lại chưa được chọn → chia đều round-robin
+      const remaining = this.selectedDiaDiem.filter(d => !used.has(d.id));
+      remaining.forEach((dd, i) => {
         const dayIdx = i % days;
-        const slotIdx = Math.floor(i / days);
-        const gio = timeSlots[slotIdx] || `0${8 + slotIdx * 2}:00`.slice(-5);
+        const lastItem = schedule[dayIdx][schedule[dayIdx].length - 1];
+        const lastEnd = lastItem ? lastItem.gio_ket_thuc.split(':').reduce((a, b, i) => i === 0 ? +b * 60 : a + +b, 0) + 20 : 8 * 60;
+        const fmt = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
         schedule[dayIdx].push({
-          id_dia_diem: dd.id,
-          ten_dia_diem: dd.ten_dia_diem,
-          dia_chi: dd.dia_chi,
-          hinh_anh: dd.hinh_anh,
-          gia_ve: dd.gia_ve || 0,
-          gio_mo_cua: dd.gio_mo_cua,
-          gio: dd.gio_mo_cua || gio,
-          ghi_chu: '',
-          vi_do: dd.vi_do || null,
-          kinh_do: dd.kinh_do || null,
+          id_dia_diem: dd.id, ten_dia_diem: dd.ten_dia_diem, dia_chi: dd.dia_chi,
+          hinh_anh: dd.hinh_anh, gia_ve: dd.gia_ve || 0,
+          gio: fmt(lastEnd), gio_bat_dau: fmt(lastEnd), gio_ket_thuc: fmt(lastEnd + 60), thoi_luong_phut: 60,
+          ghi_chu: '', vi_do: dd.vi_do || null, kinh_do: dd.kinh_do || null,
         });
       });
 
-      // Sắp xếp từng ngày theo giờ
-      schedule.forEach(day => day.sort((a, b) => a.gio.localeCompare(b.gio)));
-
       this.lichTrinhTheoNgay = schedule;
       this.activeDayTab = 1;
+    },
+
+
+    // ─── Fetch thời tiết từ Open-Meteo (miễn phí, không cần API key) ──────
+    async fetchWeatherData() {
+      if (!this.form.ngay_bat_dau || !this.form.ngay_ket_thuc) return { daily: [], hourly: {} };
+      try {
+        // Đà Nẵng: lat=16.0544, lon=108.2022
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=16.0544&longitude=108.2022`
+          + `&daily=weathercode,temperature_2m_max,precipitation_sum`
+          + `&hourly=temperature_2m,weathercode`
+          + `&timezone=Asia%2FHo_Chi_Minh`
+          + `&start_date=${this.form.ngay_bat_dau}&end_date=${this.form.ngay_ket_thuc}`;
+        const res = await fetch(url);
+        const json = await res.json();
+        if (!json.daily) return { daily: [], hourly: {} };
+
+        // WMO Weather Code → condition
+        const getCondition = (code) => {
+          if (code === 0 || code === 1) return 'sunny';
+          if (code <= 3) return 'partly_cloudy';
+          if (code <= 67) return 'rain';
+          return 'cloudy';
+        };
+
+        // — Daily (cho weather widget) —
+        const daily = json.daily.time.map((date, i) => ({
+          date,
+          condition: getCondition(json.daily.weathercode[i]),
+          temp_max: json.daily.temperature_2m_max[i],
+          precipitation: json.daily.precipitation_sum[i],
+          weathercode: json.daily.weathercode[i],
+        }));
+
+        // — Hourly (cho badge trong card) —
+        // Cấu trúc: { 'YYYY-MM-DD': { '06': { icon, temp, label }, '07': ... } }
+        const hourly = {};
+        if (json.hourly) {
+          json.hourly.time.forEach((isoTime, i) => {
+            const [dateStr, timeStr] = isoTime.split('T');
+            const hourKey = timeStr.substring(0, 2);
+            if (!hourly[dateStr]) hourly[dateStr] = {};
+            const condition = getCondition(json.hourly.weathercode[i]);
+            const iconMap  = { sunny: '☀️', partly_cloudy: '⛅', rain: '🌧️', cloudy: '☁️' };
+            const labelMap = { sunny: 'Nắng', partly_cloudy: 'Ít mây', rain: 'Mưa', cloudy: 'Nhiều mây' };
+            hourly[dateStr][hourKey] = {
+              icon : iconMap[condition]  || '🌤',
+              label: labelMap[condition] || '',
+              temp : Math.round(json.hourly.temperature_2m[i]),
+              condition,
+            };
+          });
+        }
+
+        return { daily, hourly };
+      } catch (e) {
+        console.warn('Không lấy được dữ liệu thời tiết:', e.message);
+        return { daily: [], hourly: {} };
+      }
     },
 
     async generateByAI() {
@@ -718,25 +979,71 @@ export default {
 
       const token = localStorage.getItem('client_token');
       if (!token) {
-        alert('Vui lòng đăng nhập để sử dụng tính năng AI.');
+        this.$toast.warning('Vui lòng đăng nhập để sử dụng tính năng AI.');
         return;
       }
 
       this.loadingAI = true;
+      this.aiStage = 1;
+      this.generationLog = ['Đang khởi tạo thuật toán...'];
+
       try {
+        // Lấy dữ liệu thời tiết (dùng lại nếu đã có, nếu không thì fetch mới)
+        this.generationLog.push('🌤 Đang tải dự báo thời tiết Đà Nẵng...');
+        const result = this.weatherForecast.length > 0
+          ? { daily: this.weatherForecast, hourly: this.weatherHourly }
+          : await this.fetchWeatherData();
+        if (!this.weatherForecast.length) {
+          this.weatherForecast = result.daily;
+          this.weatherHourly   = result.hourly;
+        }
+        const weatherData = result.daily;
+        if (weatherData.length > 0) {
+          const summary = weatherData.map(w => `${w.date}: ${w.condition}, ${w.temp_max}°C`).join(' | ');
+          this.generationLog.push(`✅ Thời tiết: ${summary}`);
+        }
+
+        // Stage 2
+        await new Promise(r => setTimeout(r, 600));
+        this.aiStage = 2;
+        this.generationLog.push('Đang tối ưu quãng đường di chuyển (Haversine)...');
+
+        const payload = {
+          ...this.form,
+          weather_data: weatherData,  // ← Gửi kèm thời tiết cho AI
+        };
+
         const res = await fetch(`${BASE}/client/ai/generate-itinerary`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify(this.form)
+          body: JSON.stringify(payload)
         });
-        const json = await res.json();
+
+        if (res.status === 401) {
+          localStorage.removeItem('client_token');
+          localStorage.removeItem('client_user');
+          this.$toast.error('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+          this.loadingAI = false;
+          this.aiStage = 0;
+          return;
+        }
+
+        let json;
+        try {
+          json = await res.json();
+        } catch (err) {
+          throw new Error('Lỗi từ máy chủ: Không thể đọc dữ liệu trả về.');
+        }
 
         if (json.status === 'success') {
-          // AI returns Array<Array<item>>
-          // We need to enrich it with images/addresses from allDiaDiem if possible
+          this.aiStage = 3;
+          this.generationLog.push('AI đang thêm lời khuyên du lịch chuyên sâu...');
+          await new Promise(r => setTimeout(r, 600));
+
           if (this.allDiaDiem.length === 0) await this.fetchDiaDiem();
 
           this.lichTrinhTheoNgay = json.data.map(day => {
@@ -744,30 +1051,37 @@ export default {
               const original = this.allDiaDiem.find(d => d.id === item.id_dia_diem);
               return {
                 ...item,
-                dia_chi: original?.dia_chi || item.dia_chi || 'Đà Nẵng',
-                hinh_anh: item.image || original?.hinh_anh || (original?.image) || 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=200',
+                ten_dia_diem: item.ten_dia_diem || original?.ten_dia_diem || 'Địa điểm không tên',
+                dia_chi: item.dia_chi || original?.dia_chi || 'Đà Nẵng',
+                hinh_anh: item.image || original?.hinh_anh || 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600',
                 vi_do: item.vi_do || original?.vi_do || null,
                 kinh_do: item.kinh_do || original?.kinh_do || null,
-                gia_ve: item.gia_ve || original?.gia_ve || 0
+                gia_ve: item.gia_ve || original?.gia_ve || 0,
+                ghi_chu: item.ghi_chu || '',
+                travel_tips: item.travel_tips || (json.is_technical_only ? 'Nên mang theo nước và kem chống nắng.' : '')
               };
             });
           });
 
           this.step = 3;
           this.activeDayTab = 1;
+
           this.$nextTick(() => {
-            this.initMap();
-            this.renderMapForDay(0);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            setTimeout(() => {
+              this.initMap();
+              this.renderMapForDay(0);
+              this.initSortable();
+            }, 500);
           });
         } else {
-          console.error('AI Error Details:', json);
-          const detailStr = json.details ? JSON.stringify(json.details) : '';
-          alert('AI gặp sự cố: ' + (json.message || 'Lỗi không xác định') + '\n' + detailStr);
+          this.$toast.error('Hệ thống gặp sự cố: ' + (json.message || 'Vui lòng thử lại sau.'));
         }
       } catch (e) {
-        alert('Lỗi kết nối: ' + e.message);
+        this.$toast.error('Lỗi kết nối máy chủ: ' + e.message);
       } finally {
         this.loadingAI = false;
+        this.aiStage = 0;
       }
     },
 
@@ -799,16 +1113,36 @@ export default {
           const item = dayItems.splice(evt.oldIndex, 1)[0];
           dayItems.splice(evt.newIndex, 0, item);
 
-          // Re-update hours based on new positions
-          const timeSlots = ['08:00', '10:30', '13:30', '16:00', '19:00'];
-          dayItems.forEach((it, i) => {
-            it.gio = timeSlots[i] || `0${8 + i * 2}:00`.slice(-5);
+          // Tính lại giờ dựa trên Haversine
+          const haversine = (lat1, lon1, lat2, lon2) => {
+            if (!lat1 || !lon1 || !lat2 || !lon2) return 5;
+            const R = 6371, dL = (lat2 - lat1) * Math.PI / 180, dN = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dL/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dN/2)**2;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+          };
+          const fmt = m => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+
+          let curMin = 6*60+30;
+          let prevLat = null, prevLng = null;
+          dayItems.forEach((it) => {
+            const dur = it.thoi_luong_phut || 60;
+            let travelMin = 12;
+            if (prevLat !== null && it.vi_do && it.kinh_do) {
+              const dist = haversine(prevLat, prevLng, parseFloat(it.vi_do), parseFloat(it.kinh_do));
+              travelMin = Math.max(5, Math.min(40, Math.ceil(dist / 20 * 60) + 5));
+            }
+            const startMin = curMin + (prevLat !== null ? travelMin : 0);
+            const endMin = startMin + dur;
+            it.gio = fmt(startMin);
+            it.gio_bat_dau = fmt(startMin);
+            it.gio_ket_thuc = fmt(endMin);
+            curMin = endMin;
+            prevLat = parseFloat(it.vi_do) || prevLat;
+            prevLng = parseFloat(it.kinh_do) || prevLng;
           });
 
           this.lichTrinhTheoNgay[dayIdx] = dayItems;
-          this.$nextTick(() => {
-            this.renderMapForDay(dayIdx);
-          });
+          this.$nextTick(() => { this.renderMapForDay(dayIdx); });
         }
       });
     },
@@ -828,7 +1162,7 @@ export default {
     },
 
     // ─── Lưu lịch trình ─────────────────────────
-    async saveLichTrinh() {
+    async saveLichTrinh(skipRating = false) {
       const token = localStorage.getItem('client_token');
       if (!token) {
         this.saveMsg = 'Bạn cần đăng nhập để lưu lịch trình!';
@@ -841,52 +1175,87 @@ export default {
 
       try {
         // 1. Tạo chuyến đi
+        const payload = { ...this.form, id_nhom_du_lich: this.form.id_nhom_du_lich?.id || null };
         const r1 = await fetch(`${BASE}/client/chuyen-di/create`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify(this.form),
+          body: JSON.stringify(payload),
         });
         const j1 = await r1.json();
         if (!j1.status) throw new Error(j1.message || 'Lỗi tạo chuyến đi');
 
-        // 2. Lấy id chuyến đi vừa tạo (lấy cái mới nhất của user)
-        const r2 = await fetch(`${BASE}/client/chuyen-di/get-data`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const j2 = await r2.json();
-        const newestTrip = j2.data && j2.data[0];
-        if (!newestTrip) throw new Error('Không lấy được ID chuyến đi.');
+        const newTripId = j1.data?.id;
+        if (!newTripId) throw new Error('Không lấy được ID chuyến đi mới.');
 
         // 3. Bulk create chi tiết
         const items = this.lichTrinhTheoNgay.flatMap((day, di) =>
-          day.map(item => ({
-            id_dia_diem: item.id_dia_diem,
-            thoi_gian_du_kien: `Ngày ${di + 1} – ${item.gio}`,
-            ghi_chu: item.ghi_chu || '',
+          day.map((item, idx) => ({
+            id_dia_diem:      item.id_dia_diem,
+            thu_tu_tham_quan: di * 100 + idx + 1,
+            gio_bat_dau:      item.gio_bat_dau || item.gio || null,
+            gio_ket_thuc:     item.gio_ket_thuc     || null,
+            thoi_luong_phut:  item.thoi_luong_phut  || null,
+            ghi_chu: (item.ghi_chu || '') + (item.travel_tips ? `|AI_TIPS|${item.travel_tips}` : ''),
           }))
         );
 
         const r3 = await fetch(`${BASE}/client/chi-tiet-chuyen-di/bulk-create`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ id_chuyen_di: newestTrip.id, items }),
+          body: JSON.stringify({ id_chuyen_di: newTripId, items }),
         });
         const j3 = await r3.json();
         if (!j3.status) throw new Error(j3.message || 'Lỗi lưu chi tiết');
 
         this.saveSuccess = true;
-        this.saveMsg = '🎉 Lịch trình đã được lưu thành công! Chuyển sang trang lịch trình của bạn...';
+        this.saveMsg = '🎉 Lịch trình đã được lưu thành công!';
         this.saveMsgType = 'success';
 
-        setTimeout(() => {
-          this.$router.push('/lich-trinh-cua-toi');
-        }, 2000);
+        if (this.form.id_nhom_du_lich) {
+           await this.shareToGroup(newTripId);
+        }
+
+        if (skipRating) {
+           this.$router.push('/nhom-du-lich');
+        } else {
+           // Show rating modal after short delay
+           setTimeout(() => {
+             this.showRatingModal = true;
+           }, 800);
+        }
       } catch (err) {
         this.saveMsg = err.message || 'Có lỗi xảy ra. Vui lòng thử lại.';
         this.saveMsgType = 'error';
       } finally {
         this.saving = false;
       }
+    },
+
+    openShareModal() {
+      this.showShareModal = true;
+    },
+    async confirmShare() {
+      if (!this.form.id_nhom_du_lich) return;
+      await this.saveLichTrinh(true);
+      this.showShareModal = false;
+    },
+    async shareToGroup(tripId) {
+       const group = this.form.id_nhom_du_lich;
+       if (!group) return;
+       try {
+           const payload = {
+               id_nhom_du_lich: group.id,
+               id_chi_tiet_nhom: group.id_chi_tiet_nhom,
+               message: JSON.stringify({ type: 'itinerary', id: tripId, title: this.form.ten_chuyen_di })
+           };
+           await fetch(`${BASE}/nhom-chats`, {
+               method: 'POST', 
+               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('client_token')}` },
+               body: JSON.stringify(payload)
+           });
+       } catch (e) {
+           console.error('Lỗi khi chia sẻ.', e);
+       }
     },
 
     // ─── Map Methods ───────────────────────────────────────────
@@ -967,11 +1336,122 @@ export default {
         this.mapInstance.fitBounds(bounds, { padding: [40, 40] });
       }
     },
+
+    // ─── Rating Modal Methods ─────────────────────
+    confettiStyle(n) {
+      const colors = ['#10b981', '#0ea5e9', '#f59e0b', '#f43f5e', '#8b5cf6', '#ec4899'];
+      const left = ((n - 1) * (100 / 12)) + '%';
+      const delay = (n * 0.15) + 's';
+      const color = colors[n % colors.length];
+      const size = (8 + (n % 4) * 4) + 'px';
+      return {
+        left,
+        animationDelay: delay,
+        background: color,
+        width: size,
+        height: size,
+        borderRadius: n % 2 === 0 ? '50%' : '3px',
+      };
+    },
+
+    async submitRating() {
+      if (!this.selectedRating) return;
+      this.submittingRating = true;
+
+      try {
+        const token = localStorage.getItem('client_token');
+        // Attempt to save rating to backend (non-blocking – ignore errors gracefully)
+        await fetch(`${BASE}/client/danh-gia-he-thong`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            muc_do_hai_long: this.selectedRating,
+            noi_dung: this.ratingFeedback,
+          }),
+        }).catch(() => { }); // Silently ignore if endpoint doesn't exist yet
+      } finally {
+        this.submittingRating = false;
+        this.showRatingModal = false;
+        this.$router.push('/lich-trinh-cua-toi');
+      }
+    },
+
+    skipRating() {
+      this.showRatingModal = false;
+      this.$router.push('/lich-trinh-cua-toi');
+    },
   },
 };
 </script>
 
 <style scoped>
+/* ──────────── Weather Widget ──────────── */
+.weather-widget {
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid #e0eaff;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 20px rgba(14, 165, 233, 0.08);
+}
+
+.weather-header {
+  display: flex;
+  align-items: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #0369a1;
+  margin-bottom: 1rem;
+}
+
+.weather-days {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.weather-day-card {
+  min-width: 110px;
+  border-radius: 14px;
+  padding: 0.9rem 0.75rem;
+  text-align: center;
+  flex-shrink: 0;
+  transition: transform 0.2s;
+  cursor: default;
+}
+.weather-day-card:hover { transform: translateY(-3px); }
+
+.weather-sunny    { background: linear-gradient(135deg, #fff7e6, #ffe4a0); border: 1px solid #fbbf24; }
+.weather-partly_cloudy { background: linear-gradient(135deg, #f0f9ff, #bae6fd); border: 1px solid #7dd3fc; }
+.weather-rain     { background: linear-gradient(135deg, #eff6ff, #bfdbfe); border: 1px solid #60a5fa; }
+.weather-cloudy   { background: linear-gradient(135deg, #f8fafc, #e2e8f0); border: 1px solid #94a3b8; }
+
+.weather-date  { font-size: 0.72rem; font-weight: 600; color: #64748b; margin-bottom: 0.4rem; }
+.weather-icon  { font-size: 2rem; margin-bottom: 0.3rem; line-height: 1; }
+.weather-temp  { font-size: 1.3rem; font-weight: 800; color: #1e2d44; }
+.weather-label { font-size: 0.75rem; font-weight: 600; margin-top: 0.25rem; color: #475569; }
+.weather-tip   { font-size: 0.68rem; color: #64748b; margin-top: 0.4rem; line-height: 1.3; }
+
+/* ──────────── Weather Inline Badge (trong card địa điểm) ──────────── */
+.weather-inline-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 20px;
+  background: rgba(14, 165, 233, 0.08);
+  border: 1px solid rgba(14, 165, 233, 0.2);
+  font-size: 0.78rem;
+}
+.wib-icon  { font-size: 1rem; line-height: 1; }
+.wib-temp  { font-weight: 700; color: #0369a1; }
+.wib-label { color: #64748b; font-size: 0.72rem; }
+
 /* ──────────── Base ──────────── */
 .tlt-page {
   min-height: 100vh;
@@ -1590,21 +2070,42 @@ label {
 }
 
 .timeline-time {
-  width: 62px;
+  width: 72px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   padding-top: 0.2rem;
+  gap: 0.2rem;
 }
 
 .time-badge {
   background: linear-gradient(135deg, #10b981, #0ea5e9);
   color: #fff;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  padding: 0.28rem 0.5rem;
-  border-radius: 0.6rem;
+  padding: 0.25rem 0.45rem;
+  border-radius: 0.55rem;
+  white-space: nowrap;
+}
+
+.time-end-badge {
+  background: #e0f2fe;
+  color: #0369a1;
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.18rem 0.4rem;
+  border-radius: 0.45rem;
+  white-space: nowrap;
+}
+
+.duration-badge {
+  background: #fef9c3;
+  color: #854d0e;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.15rem 0.38rem;
+  border-radius: 0.45rem;
   white-space: nowrap;
 }
 
@@ -2031,5 +2532,287 @@ label {
   height: 500px;
   width: 100%;
   z-index: 0;
+}
+
+/* ══════════════════════════════════════════
+   Rating Modal
+   ══════════════════════════════════════════ */
+.rating-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 20, 40, 0.65);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 1rem;
+}
+
+.rating-modal-box {
+  background: #fff;
+  border-radius: 2rem;
+  padding: 2.5rem 2.2rem 2rem;
+  max-width: 540px;
+  width: 100%;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 32px 80px rgba(10, 20, 60, 0.28);
+  animation: modalBounceIn 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes modalBounceIn {
+  from {
+    opacity: 0;
+    transform: scale(0.82) translateY(30px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Confetti */
+.confetti-wrap {
+  position: absolute;
+  top: -6px;
+  left: 0;
+  width: 100%;
+  height: 60px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.confetti-dot {
+  position: absolute;
+  top: 0;
+  opacity: 0;
+  animation: confettiFall 1.4s ease-out forwards;
+}
+
+@keyframes confettiFall {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px) rotate(0deg);
+  }
+
+  20% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(72px) rotate(180deg);
+  }
+}
+
+/* Header */
+.rm-header {
+  text-align: center;
+  margin-bottom: 1.8rem;
+}
+
+.rm-success-icon {
+  font-size: 3rem;
+  color: #10b981;
+  margin-bottom: 0.6rem;
+  animation: bounceScale 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) 0.3s both;
+}
+
+@keyframes bounceScale {
+  from {
+    transform: scale(0);
+  }
+
+  to {
+    transform: scale(1);
+  }
+}
+
+.rm-title {
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: #1e2d44;
+  margin-bottom: 0.35rem;
+}
+
+.rm-subtitle {
+  font-size: 0.97rem;
+  color: #627289;
+  margin: 0;
+}
+
+/* Face buttons */
+.rm-faces {
+  display: flex;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.rm-face-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.7rem 0.9rem;
+  border: 2.5px solid #e2e8f0;
+  border-radius: 1.1rem;
+  background: #f8faff;
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+  min-width: 72px;
+}
+
+.rm-face-btn:hover {
+  border-color: #10b981;
+  background: #f0fdf8;
+  transform: translateY(-4px) scale(1.07);
+  box-shadow: 0 8px 20px rgba(16, 185, 129, 0.18);
+}
+
+.rm-face-btn.selected {
+  border-color: #10b981;
+  background: linear-gradient(135deg, #d1fae5, #e0f2fe);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.25);
+  transform: translateY(-4px) scale(1.1);
+}
+
+.rm-face-icon {
+  font-size: 2rem;
+  line-height: 1;
+  transition: transform 0.2s;
+}
+
+.rm-face-btn:hover .rm-face-icon,
+.rm-face-btn.selected .rm-face-icon {
+  transform: scale(1.18);
+}
+
+.rm-face-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #5a7080;
+  white-space: nowrap;
+}
+
+.rm-face-btn.selected .rm-face-label {
+  color: #065f46;
+}
+
+/* Selected rating feedback text */
+.rm-selected-text {
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #065f46;
+  background: #d1fae5;
+  border-radius: 0.7rem;
+  padding: 0.55rem 1rem;
+  margin: 0 0 1.2rem;
+  animation: fadeUp 0.3s ease both;
+}
+
+/* Feedback textarea */
+.rm-feedback-wrap {
+  margin-bottom: 1.5rem;
+}
+
+.rm-feedback-label {
+  display: block;
+  font-size: 0.87rem;
+  font-weight: 600;
+  color: #3d5166;
+  margin-bottom: 0.4rem;
+}
+
+.rm-textarea {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1.5px solid #dbe3f0;
+  border-radius: 0.9rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+  color: #1e2d44;
+  background: #f8fbff;
+  resize: vertical;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+}
+
+.rm-textarea:focus {
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12);
+}
+
+/* Actions */
+.rm-actions {
+  display: flex;
+  gap: 0.8rem;
+  justify-content: flex-end;
+}
+
+.rm-btn-skip {
+  padding: 0.65rem 1.4rem;
+  border: 1.5px solid #dbe3f0;
+  border-radius: 0.9rem;
+  background: #fff;
+  color: #627289;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.rm-btn-skip:hover {
+  background: #f0f4f8;
+  border-color: #b0bec9;
+}
+
+.rm-btn-submit {
+  padding: 0.65rem 1.6rem;
+  border: none;
+  border-radius: 0.9rem;
+  background: linear-gradient(135deg, #10b981, #0ea5e9);
+  color: #fff;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.22s;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+}
+
+.rm-btn-submit:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(16, 185, 129, 0.38);
+}
+
+.rm-btn-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Transitions */
+.rating-modal-enter-active,
+.rating-modal-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.rating-modal-enter-from,
+.rating-modal-leave-to {
+  opacity: 0;
+}
+
+.fade-slide-enter-active,
+.fade-slide-leave-active {
+  transition: all 0.3s ease;
+}
+
+.fade-slide-enter-from,
+.fade-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 </style>

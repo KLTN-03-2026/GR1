@@ -86,6 +86,11 @@
                   <i class="bi bi-map text-success"></i> Lịch trình của tôi
                 </router-link>
               </li>
+              <li>
+                <router-link to="/yeu-thich" class="dropdown-item d-flex align-items-center gap-2">
+                  <i class="bi bi-heart-fill text-danger"></i> Địa điểm yêu thích
+                </router-link>
+              </li>
               <li><hr class="dropdown-divider"></li>
               <li>
                 <button @click="dangXuat" class="dropdown-item d-flex align-items-center gap-2 text-danger">

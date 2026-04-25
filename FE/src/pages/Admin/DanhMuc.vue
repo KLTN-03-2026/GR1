@@ -152,8 +152,10 @@
               </div>
               <div class="d-flex justify-content-end gap-2">
                 <button type="button" class="btn btn-light rounded-pill px-4 fw-medium" data-bs-dismiss="modal">Hủy</button>
-                <button type="submit" class="btn btn-primary rounded-pill px-4 fw-medium shadow-sm">
-                  <i class="bi bi-check2-circle me-1"></i> Lưu thông tin
+                <button type="submit" class="btn btn-primary rounded-pill px-4 fw-medium shadow-sm" :disabled="isSaving">
+                  <span v-if="isSaving" class="spinner-border spinner-border-sm me-1"></span>
+                  <i v-else class="bi bi-check2-circle me-1"></i> 
+                  {{ isSaving ? 'Đang lưu...' : 'Lưu thông tin' }}
                 </button>
               </div>
             </form>
@@ -165,6 +167,9 @@
 </template>
 
 <script>
+import axios from 'axios';
+import { Modal } from 'bootstrap';
+
 export default {
   name: 'DanhMucManagement',
   data() {
@@ -181,14 +186,9 @@ export default {
         description: '',
         isActive: true
       },
-      // Mock data cho giao diện
-      categories: [
-        { id: 1, name: 'Ẩm thực', slug: 'am-thuc', description: 'Các nhà hàng, quán ăn, đặc sản địa phương', placesCount: 145, status: 'active', icon: 'bi-cup-hot' },
-        { id: 2, name: 'Check-in', slug: 'check-in', description: 'Địa điểm sống ảo, cảnh đẹp, biểu tượng thành phố', placesCount: 89, status: 'active', icon: 'bi-camera' },
-        { id: 3, name: 'Giải trí', slug: 'giai-tri', description: 'Khu vui chơi, chợ đêm, các hoạt động ngoài trời', placesCount: 56, status: 'active', icon: 'bi-controller' },
-        { id: 4, name: 'Tâm linh', slug: 'tam-linh', description: 'Chùa chiền, đền thờ, các di tích tôn giáo', placesCount: 32, status: 'active', icon: 'bi-bank' },
-        { id: 5, name: 'Nghỉ dưỡng', slug: 'nghi-duong', description: 'Khách sạn, resort, homestay', placesCount: 204, status: 'inactive', icon: 'bi-house-heart' }
-      ]
+      categories: [],
+      isLoading: false,
+      isSaving: false
     }
   },
   computed: {
@@ -210,8 +210,33 @@ export default {
     }
   },
   methods: {
+    authConfig() {
+      const token = localStorage.getItem('key_admin');
+      return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+    },
     search() {
       this.currentPage = 1;
+    },
+    async fetchCategories() {
+      try {
+        this.isLoading = true;
+        const res = await axios.get('http://127.0.0.1:8000/api/danh-mucs', this.authConfig());
+        if (res.data && res.data.data) {
+          this.categories = res.data.data.map(item => ({
+            id: item.id,
+            name: item.ten_danh_muc,
+            description: item.mo_ta || '',
+            slug: item.ten_danh_muc.toLowerCase().replace(/ /g, '-').normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
+            placesCount: item.placesCount || 0,
+            status: 'active',
+            icon: 'bi-folder'
+          }));
+        }
+      } catch (error) {
+        console.error("Lỗi khi tải danh mục:", error);
+      } finally {
+        this.isLoading = false;
+      }
     },
     openAddModal() {
       this.isEditing = false;
@@ -230,21 +255,62 @@ export default {
       this.showModal();
     },
     showModal() {
-      // Dùng import bootstrap linh động để tránh lỗi nếu không cài đặt toàn cầu
-      const myModal = new window.bootstrap.Modal(document.getElementById('categoryModal'));
+      const myModal = new Modal(document.getElementById('categoryModal'));
       myModal.show();
     },
-    saveCategory() {
-      alert("Tính năng đang phát triển. (Lưu danh mục: " + this.formData.name + ")");
+    hideModal() {
       const modalEl = document.getElementById('categoryModal');
-      const modal = window.bootstrap.Modal.getInstance(modalEl);
-      if(modal) modal.hide();
+      const modal = Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+      
+      // Clean up backdrop explicitly just in case
+      const backdrop = document.querySelector('.modal-backdrop');
+      if (backdrop) {
+        backdrop.remove();
+      }
+      document.body.classList.remove('modal-open');
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
     },
-    confirmDelete(category) {
-      if(confirm('Bạn có chắc chắn muốn xóa danh mục: ' + category.name + '?')) {
-        alert("Chức năng xóa đang được phát triển.");
+    async saveCategory() {
+      try {
+        this.isSaving = true;
+        const payload = {
+          ten_danh_muc: this.formData.name,
+          mo_ta: this.formData.description
+        };
+        
+        if (this.isEditing) {
+          await axios.put(`http://127.0.0.1:8000/api/danh-mucs/${this.formData.id}`, payload, this.authConfig());
+        } else {
+          await axios.post('http://127.0.0.1:8000/api/danh-mucs', payload, this.authConfig());
+        }
+        
+        await this.fetchCategories();
+        this.$toast ? this.$toast.success('Lưu danh mục thành công!') : alert('Lưu danh mục thành công!');
+        this.hideModal();
+      } catch (error) {
+        console.error("Lỗi khi lưu danh mục:", error);
+        this.$toast ? this.$toast.error(error.response?.data?.message || 'Có lỗi xảy ra khi lưu danh mục.') : alert(error.response?.data?.message || 'Có lỗi xảy ra khi lưu danh mục.');
+      } finally {
+        this.isSaving = false;
+      }
+    },
+    async confirmDelete(category) {
+      if(confirm('Bạn có chắc chắn muốn xóa danh mục: ' + category.name + '? Mọi địa điểm sẽ bị gỡ khỏi danh mục này!')) {
+        try {
+          await axios.delete(`http://127.0.0.1:8000/api/danh-mucs/${category.id}`, this.authConfig());
+          await this.fetchCategories();
+          this.$toast ? this.$toast.success('Xóa danh mục thành công!') : alert('Xóa danh mục thành công!');
+        } catch (error) {
+          console.error("Lỗi khi xóa:", error);
+          this.$toast ? this.$toast.error(error.response?.data?.message || 'Có lỗi xảy ra khi xóa danh mục.') : alert(error.response?.data?.message || 'Có lỗi xảy ra khi xóa danh mục.');
+        }
       }
     }
+  },
+  mounted() {
+    this.fetchCategories();
   },
   watch: {
     'formData.name'(newVal) {

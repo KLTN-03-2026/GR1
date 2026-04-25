@@ -289,6 +289,9 @@ export default {
         const res = await axios.get(`${API}/profile/${userId}`, this.authHeader())
         if (res.data.status === 'success' || res.data.status === true) {
           this.user = res.data.data || {}
+          if (res.data.stats) {
+            this.stats = res.data.stats
+          }
           localStorage.setItem('client_ten', this.user.ten || '')
           localStorage.setItem('client_avatar', this.user.anh_dai_dien || '')
           this.emitProfileUpdated()
@@ -516,6 +519,7 @@ export default {
             this.$toast.error(err.response.data.message)
           }
           localStorage.removeItem('client_token')
+          localStorage.removeItem('access_token')
           localStorage.removeItem('client_id')
           this.$router.replace('/client/dang-nhap')
         } else {

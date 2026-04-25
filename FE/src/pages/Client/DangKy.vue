@@ -136,20 +136,6 @@
                 khoản</span>
             </button>
 
-            <!-- OR -->
-            <div class="divider d-flex align-items-center divider-compact">
-              <div class="line flex-grow-1"></div>
-              <span class="px-3 text-muted small fw-medium text-uppercase tracking-wide">Hoặc tham gia
-                bằng</span>
-              <div class="line flex-grow-1"></div>
-            </div>
-
-            <button type="button"
-              class="btn btn-social w-100 btn-lg action-btn text-dark d-flex align-items-center justify-content-center hover-lift">
-              <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" width="22" class="me-3" />
-              <span class="fw-semibold fs-6">Đăng ký bằng Google</span>
-            </button>
-
             <!-- Trở về Đăng nhập -->
             <div class="text-center switch-auth">
               <p class="text-secondary small">Đã có tài khoản?

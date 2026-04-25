@@ -70,6 +70,7 @@ class ClientApiController extends Controller
 
         $chuyenDi = ChuyenDi::create([
             'id_nguoi_dung' => $userId,
+            'id_nhom_du_lich' => $request->id_nhom_du_lich ?? null,
             'ten_chuyen_di' => $request->ten_chuyen_di,
             'so_ngay'       => $so_ngay,
             'so_nguoi'      => $request->so_luong_thanh_vien ?? 1,
@@ -157,6 +158,33 @@ class ClientApiController extends Controller
         return response()->json([
             'status' => true,
             'message' => 'Lưu chi tiết lịch trình thành công'
+        ], 200);
+    }
+
+    public function getChiTietChuyenDi($id)
+    {
+        $userId = auth('sanctum')->id();
+        $chuyenDi = ChuyenDi::find($id);
+
+        if (!$chuyenDi) {
+            return response()->json(['status' => false, 'message' => 'Không tìm thấy chuyến đi.'], 404);
+        }
+
+        $is_leader = false;
+        if ($chuyenDi->id_nhom_du_lich && $userId) {
+            $chiTietNhom = \App\Models\ChiTietNhom::where('id_nguoi_dung', $userId)
+                ->where('id_nhom_du_lich', $chuyenDi->id_nhom_du_lich)
+                ->first();
+            if ($chiTietNhom && $chiTietNhom->vai_tro === 'truong_nhom') {
+                $is_leader = true;
+            }
+        }
+
+        $chuyenDi->is_leader = $is_leader;
+
+        return response()->json([
+            'status' => true,
+            'data' => $chuyenDi
         ], 200);
     }
 

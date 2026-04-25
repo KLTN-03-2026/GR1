@@ -5,8 +5,8 @@
         <!-- Left: Logo & Brand -->
         <div class="d-flex align-items-center gap-3">
           <div class="logo-brand">
-            <i class="bi bi-speedometer2 me-2"></i>
-            <span class="fw-bold">MatDash</span>
+            <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR3H7FDGtE7IOwPdIbFilEYiOmUAI9w-x1U6A&s" alt="">
+            <span class="fw-bold">ADMIN HUB</span>
           </div>
         </div>
 
@@ -56,8 +56,8 @@
             </div>
 
             <!-- User Profile -->
-            <div class="dropdown ms-3 ps-3 border-start">
-              <button class="btn-profile d-flex align-items-center gap-2" data-bs-toggle="dropdown">
+            <div class="dropdown ms-3 ps-3 border-start" @click.stop="toggleProfile">
+              <button class="btn-profile d-flex align-items-center gap-2">
                 <img 
                   :src="avatarUrl" 
                   alt="User" 
@@ -68,12 +68,16 @@
                 <span class="d-none d-md-inline small fw-500">{{ adminDisplayName }}</span>
                 <i class="bi bi-chevron-down"></i>
               </button>
-              <ul class="dropdown-menu dropdown-menu-end dropdown-menu-custom">
-                <li><a class="dropdown-item" href="#"><i class="bi bi-person me-2"></i>My Profile</a></li>
+              <ul class="dropdown-menu dropdown-menu-end dropdown-menu-custom" :class="{ 'show': showProfile }">
+                <li>
+                  <router-link to="/admin/profile" class="dropdown-item">
+                    <i class="bi bi-person me-2"></i>My Profile
+                  </router-link>
+                </li>
                 <li><a class="dropdown-item" href="#"><i class="bi bi-gear me-2"></i>Settings</a></li>
                 <li><a class="dropdown-item" href="#"><i class="bi bi-question-circle me-2"></i>Help</a></li>
                 <li><hr class="dropdown-divider"></li>
-                <li><button class="dropdown-item text-danger" @click="dangXuat"><i class="bi bi-box-arrow-right me-2"></i>Logout</button></li>
+                <li><button class="dropdown-item text-danger" @click.stop="dangXuat"><i class="bi bi-box-arrow-right me-2"></i>Logout</button></li>
               </ul>
             </div>
           </div>
@@ -89,6 +93,9 @@ export default {
   data() {
     return {
       admin: {},
+      showNotif: false,
+      showMsg: false,
+      showProfile: false,
     };
   },
   computed: {
@@ -102,8 +109,20 @@ export default {
   },
   mounted() {
     this.loadAdminData();
+    document.addEventListener('click', this.closeAllDropdowns);
+  },
+  unmounted() {
+    document.removeEventListener('click', this.closeAllDropdowns);
   },
   methods: {
+    toggleNotif() { this.showNotif = !this.showNotif; this.showMsg = false; this.showProfile = false; },
+    toggleMsg() { this.showMsg = !this.showMsg; this.showNotif = false; this.showProfile = false; },
+    toggleProfile() { this.showProfile = !this.showProfile; this.showNotif = false; this.showMsg = false; },
+    closeAllDropdowns() {
+      this.showNotif = false;
+      this.showMsg = false;
+      this.showProfile = false;
+    },
     loadAdminData() {
       const adminData = localStorage.getItem('admin_data');
       if (!adminData) return;
@@ -143,6 +162,14 @@ export default {
   font-weight: 700;
   cursor: pointer;
   letter-spacing: -0.3px;
+}
+
+.logo-brand img {
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  margin-right: 8px;
 }
 
 .logo-brand i {
