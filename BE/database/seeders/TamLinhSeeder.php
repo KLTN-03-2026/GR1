@@ -133,6 +133,33 @@ class TamLinhSeeder extends Seeder
                 'danh_gia_trung_binh' => 4.5, 'loai_dia_diem' => 'Nhà thờ',
                 'image'        => 'https://upload.wikimedia.org/wikipedia/commons/2/2d/Nh%C3%A0_th%E1%BB%9D_Tho%E1%BA%A1i_Ng%E1%BB%8Dc_H%E1%BA%A7u%2C_An_H%E1%BA%A3i_T%C3%A2y%2C_S%C6%A1n_Tr%C3%A0%2C_%C4%90%C3%A0_N%E1%BA%B5ng_2.jpeg',
             ],
+            [
+                'ten_dia_diem' => 'Chùa Tam Bảo',
+                'mo_ta'        => 'Ngôi chùa Phật giáo Nguyên Thủy (Theravada) mang kiến trúc pha trộn độc đáo và lưu giữ nhiều xá lợi.',
+                'dia_chi'      => '323 Phan Châu Trinh, Hải Châu, Đà Nẵng',
+                'kinh_do'      => 108.2201, 'vi_do' => 16.0575,
+                'gia_ve'       => 0, 'gio_mo_cua' => '05:00', 'gio_dong_cua' => '21:00',
+                'danh_gia_trung_binh' => 4.6, 'loai_dia_diem' => 'Chùa',
+                'image'        => 'https://image.vietnamnews.vn/uploadvnnews/Article/2021/5/25/164741_10214871465922370_1928014529267104990_n.jpg',
+            ],
+            [
+                'ten_dia_diem' => 'Chùa Phổ Đà',
+                'mo_ta'        => 'Ngôi chùa cổ với kiến trúc hình chữ Khẩu, nơi đặt Học viện Phật giáo Việt Nam tại Đà Nẵng.',
+                'dia_chi'      => '340 Phan Châu Trinh, Bình Hiên, Hải Châu, Đà Nẵng',
+                'kinh_do'      => 108.2208, 'vi_do' => 16.0573,
+                'gia_ve'       => 0, 'gio_mo_cua' => '05:00', 'gio_dong_cua' => '20:30',
+                'danh_gia_trung_binh' => 4.7, 'loai_dia_diem' => 'Chùa',
+                'image'        => 'https://phatgiaodanang.vn/wp-content/uploads/2019/12/Chua-Pho-Da-5-1024x768.jpg',
+            ],
+            [
+                'ten_dia_diem' => 'Đền thờ Thoại Ngọc Hầu',
+                'mo_ta'        => 'Đền thờ ghi nhớ công ơn vị danh tướng Thoại Ngọc Hầu có công khai hoang lập ấp.',
+                'dia_chi'      => 'An Hải Tây, Sơn Trà, Đà Nẵng',
+                'kinh_do'      => 108.2325, 'vi_do' => 16.0640,
+                'gia_ve'       => 0, 'gio_mo_cua' => '07:00', 'gio_dong_cua' => '17:00',
+                'danh_gia_trung_binh' => 4.4, 'loai_dia_diem' => 'Đền',
+                'image'        => 'https://tourdanangcity.vn/wp-content/uploads/2021/04/thoai-ngoc-hau-da-nang-7.jpg',
+            ],
         ];
 
         foreach ($places as $placeData) {
