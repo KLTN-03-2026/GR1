@@ -16,10 +16,10 @@
             </p>
 
             <div class="d-flex flex-wrap gap-3">
-              <router-link to="/tao-lich-trinh" class="btn btn-brand btn-lg px-4">
+              <router-link to="/tao-lich-trinh" id="cta-create-itinerary-hero" class="btn btn-brand btn-lg px-4">
                 Tạo lịch trình ngay
               </router-link>
-              <a href="#overview" class="btn btn-light btn-lg px-4 btn-watch">
+              <a href="#overview" id="cta-view-overview-hero" class="btn btn-light btn-lg px-4 btn-watch">
                 <i class="bi bi-play-circle me-2"></i>Xem tổng quan
               </a>
             </div>
@@ -315,10 +315,10 @@
             cho chuyến đi sắp tới.
           </p>
           <div class="d-flex justify-content-center flex-wrap gap-3">
-            <router-link to="/tao-lich-trinh" class="btn btn-light btn-lg px-4">
+            <router-link to="/tao-lich-trinh" id="cta-create-itinerary-footer" class="btn btn-light btn-lg px-4">
               Tạo lịch trình
             </router-link>
-            <router-link to="/dia-diem" class="btn btn-outline-light btn-lg px-4">
+            <router-link to="/dia-diem" id="cta-view-places-footer" class="btn btn-outline-light btn-lg px-4">
               Xem địa điểm
             </router-link>
           </div>
@@ -352,8 +352,9 @@
                 <div class="review-avatar overflow-hidden">
                   <img
                     :src="review.avatar"
-                    :alt="review.name"
+                    :alt="`Ảnh đại diện của ${review.name}`"
                     class="review-avatar-image"
+                    loading="lazy"
                   >
                 </div>
                 <div>
@@ -480,6 +481,7 @@ export default {
     };
   },
   mounted() {
+    document.title = "AI Travel Planner - Lên kế hoạch du lịch Đà Nẵng thông minh";
     this.$nextTick(() => {
       const elements = this.$el?.querySelectorAll('[data-reveal]') || [];
 

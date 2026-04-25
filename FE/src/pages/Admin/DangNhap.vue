@@ -8,16 +8,10 @@
                         <div class="card-body p-5">
                             <div class="text-center mb-5">
                                 <div class="logo-wrapper mb-3">
-                                    <div
-                                        class="logo-icon bg-primary text-white bg-gradient rounded-circle d-inline-flex align-items-center justify-content-center shadow"
-                                        style="width: 65px; height: 65px;"
-                                    >
-                                        <img
-                                            src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR3H7FDGtE7IOwPdIbFilEYiOmUAI9w-x1U6A&s"
-                                            alt="Logo"
-                                            class="logo-img"
-                                            style="width: 95px; height: 95px;"
-                                        />
+                                    <div class="logo-icon bg-primary text-white bg-gradient rounded-circle d-inline-flex align-items-center justify-content-center shadow"
+                                        style="width: 65px; height: 65px;">
+                                        <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR3H7FDGtE7IOwPdIbFilEYiOmUAI9w-x1U6A&s"
+                                            alt="Logo" class="logo-img" style="width: 95px; height: 95px;" />
                                     </div>
                                 </div>
                                 <h3 class="fw-bold text-uppercase mb-1" style="letter-spacing: 1px; color: #2c3e50;">
@@ -27,55 +21,49 @@
 
                             <div class="form-body">
                                 <div class="mb-4">
-                                    <label class="form-label fw-semibold text-secondary small text-uppercase">Email Dang Nhap</label>
-                                    <div class="input-group input-group-lg bg-light rounded-3" :class="{ 'border-danger': errors.email }">
+                                    <label class="form-label fw-semibold text-secondary small text-uppercase">Email Đăng Nhập</label>
+                                    <div class="input-group input-group-lg bg-light rounded-3"
+                                        :class="{ 'border-danger': errors.email }">
                                         <span class="input-group-text border-0 bg-transparent text-primary px-3">
                                             <i class="fa-solid fa-envelope"></i>
                                         </span>
-                                        <input
-                                            v-model="thong_tin_dang_nhap.email"
-                                            @keydown.enter="dangNhap"
-                                            type="email"
-                                            class="form-control border-0 bg-transparent"
-                                            :class="{ 'is-invalid': errors.email }"
-                                            placeholder="admin@travel.com"
-                                            @input="errors.email = ''"
-                                        >
+                                        <input v-model="thong_tin_dang_nhap.email" @keydown.enter="dangNhap"
+                                            type="email" class="form-control border-0 bg-transparent"
+                                            :class="{ 'is-invalid': errors.email }" placeholder="admin@travel.com"
+                                            @input="errors.email = ''">
                                     </div>
-                                    <div v-if="errors.email" class="text-danger small mt-1 ms-1">{{ errors.email }}</div>
+                                    <div v-if="errors.email" class="text-danger small mt-1 ms-1">{{ errors.email }}
+                                    </div>
                                 </div>
 
                                 <div class="mb-4">
-                                    <label class="form-label fw-semibold text-secondary small text-uppercase">Mat Khau</label>
-                                    <div class="input-group input-group-lg bg-light rounded-3" :class="{ 'border-danger': errors.mat_khau }">
+                                    <label class="form-label fw-semibold text-secondary small text-uppercase">Mật
+                                        Khẩu</label>
+                                    <div class="input-group input-group-lg bg-light rounded-3"
+                                        :class="{ 'border-danger': errors.mat_khau }">
                                         <span class="input-group-text border-0 bg-transparent text-primary px-3">
                                             <i class="fa-solid fa-lock"></i>
                                         </span>
-                                        <input
-                                            v-model="thong_tin_dang_nhap.mat_khau"
-                                            @keydown.enter="dangNhap"
-                                            type="password"
-                                            class="form-control border-0 bg-transparent"
-                                            :class="{ 'is-invalid': errors.mat_khau }"
-                                            placeholder="Nhap mat khau"
-                                            @input="errors.mat_khau = ''"
-                                        >
+                                        <input v-model="thong_tin_dang_nhap.mat_khau" @keydown.enter="dangNhap"
+                                            type="password" class="form-control border-0 bg-transparent"
+                                            :class="{ 'is-invalid': errors.mat_khau }" placeholder="Nhập mật khẩu"
+                                            @input="errors.mat_khau = ''">
                                     </div>
-                                    <div v-if="errors.mat_khau" class="text-danger small mt-1 ms-1">{{ errors.mat_khau }}</div>
+                                    <div v-if="errors.mat_khau" class="text-danger small mt-1 ms-1">{{ errors.mat_khau
+                                        }}</div>
                                 </div>
 
                                 <div class="d-grid mt-5">
-                                    <button
-                                        @click="dangNhap"
-                                        :disabled="loading"
-                                        class="btn btn-primary btn-lg rounded-3 fw-bold btn-login position-relative overflow-hidden"
-                                    >
-                                        <span v-if="loading" class="position-relative z-index-1 d-flex align-items-center justify-content-center">
+                                    <button @click="dangNhap" :disabled="loading"
+                                        class="btn btn-primary btn-lg rounded-3 fw-bold btn-login position-relative overflow-hidden">
+                                        <span v-if="loading"
+                                            class="position-relative z-index-1 d-flex align-items-center justify-content-center">
                                             <span class="spinner-border spinner-border-sm me-2" role="status"></span>
-                                            Dang dang nhap...
+                                          Đang Đăng Nhập...
                                         </span>
-                                        <span v-else class="position-relative z-index-1 d-flex align-items-center justify-content-center">
-                                            <i class="fa-solid fa-right-to-bracket me-2"></i> Dang Nhap
+                                        <span v-else
+                                            class="position-relative z-index-1 d-flex align-items-center justify-content-center">
+                                            <i class="fa-solid fa-right-to-bracket me-2"></i> Đăng Nhập
                                         </span>
                                     </button>
                                 </div>
@@ -84,7 +72,7 @@
                     </div>
 
                     <div class="text-center mt-4 text-white-50 small" style="position: relative; z-index: 1;">
-                        <p>&copy; 2026 AI Travel System. He thong phuc vu Khoa Luan Tot Nghiep.</p>
+                        <p>&copy; 2026 AI Travel System.</p>
                     </div>
                 </div>
             </div>
@@ -112,12 +100,12 @@ export default {
             let isValid = true;
 
             if (!this.thong_tin_dang_nhap.email?.trim()) {
-                this.errors.email = 'Email la bat buoc.';
+                this.errors.email = 'Email là bắt buộc.';
                 isValid = false;
             }
 
             if (!this.thong_tin_dang_nhap.mat_khau) {
-                this.errors.mat_khau = 'Mat khau la bat buoc.';
+                this.errors.mat_khau = 'Mật khẩu là bắt buộc.';
                 isValid = false;
             }
 
@@ -136,7 +124,28 @@ export default {
                         localStorage.setItem('admin_data', JSON.stringify(adminData));
                         localStorage.setItem('admin_ten', adminData.ho_ten || adminData.ten || adminData.email || 'Admin');
                         this.$toast.success(res.data.message);
-                        this.$router.push('/admin/dashboard');
+
+                        // Xác định trang đích dựa trên quyền
+                        const isSuperAdmin = Number(adminData?.id_chuc_vu || adminData?.chuc_vu) === 1;
+                        let targetRoute = '/admin/dashboard';
+
+                        if (!isSuperAdmin) {
+                            const chucNangs = adminData?.chuc_vu?.chuc_nangs || adminData?.chucVu?.chucNangs || [];
+                            const perms = chucNangs.map(p => p.ma_chuc_nang);
+
+                            if (perms.includes('dashboard_view')) targetRoute = '/admin/dashboard';
+                            else if (perms.includes('user_manage')) targetRoute = '/admin/users';
+                            else if (perms.includes('category_manage')) targetRoute = '/admin/danh-muc';
+                            else if (perms.includes('place_amthuc_manage')) targetRoute = '/admin/am-thuc';
+                            else if (perms.includes('place_tamlinh_manage')) targetRoute = '/admin/tam-linh';
+                            else if (perms.includes('place_giaitri_manage')) targetRoute = '/admin/giai-tri';
+                            else if (perms.includes('place_checkin_manage')) targetRoute = '/admin/check-in';
+                            else if (perms.includes('review_manage')) targetRoute = '/admin/quan-ly-danh-gia-phan-hoi';
+                            else if (perms.includes('report_view')) targetRoute = '/admin/reports';
+                            // Nếu không có quyền nào, cho ở lại hoặc sang dashboard để bị báo lỗi
+                        }
+
+                        this.$router.push(targetRoute);
                         return;
                     }
 
@@ -144,7 +153,7 @@ export default {
                 })
                 .catch((error) => {
                     if (error.response?.status === 401 || error.response?.status === 403) {
-                        this.$toast.error(error.response.data.message || 'Dang nhap that bai.');
+                        this.$toast.error(error.response.data.message || 'Đăng nhập thất bại.');
                         return;
                     }
 
@@ -157,11 +166,11 @@ export default {
                         }
 
                         this.errors = { ...this.errors, ...parsedErrors };
-                        this.$toast.error(error.response.data.message || 'Du lieu khong hop le.');
+                        this.$toast.error(error.response.data.message || 'Dữ liệu không hợp lệ.');
                         return;
                     }
 
-                    this.$toast.error('Khong the ket noi den may chu!');
+                    this.$toast.error('Không thể kết nối đến máy chủ!');
                 })
                 .finally(() => {
                     this.loading = false;
@@ -248,8 +257,16 @@ export default {
 }
 
 @keyframes float {
-    0% { transform: translateY(0px); }
-    50% { transform: translateY(-8px); }
-    100% { transform: translateY(0px); }
+    0% {
+        transform: translateY(0px);
+    }
+
+    50% {
+        transform: translateY(-8px);
+    }
+
+    100% {
+        transform: translateY(0px);
+    }
 }
 </style>

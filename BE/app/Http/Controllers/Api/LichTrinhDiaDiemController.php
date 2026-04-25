@@ -7,6 +7,7 @@ use App\Models\LichTrinhDiaDiem;
 use App\Models\DiaDiem;
 use App\Http\Requests\StoreLichTrinhDiaDiemRequest;
 use App\Http\Requests\UpdateLichTrinhDiaDiemRequest;
+use Illuminate\Http\Request;
 
 class LichTrinhDiaDiemController extends Controller
 {
@@ -24,6 +25,7 @@ class LichTrinhDiaDiemController extends Controller
                 $diaDiem = DiaDiem::find($lt->id_dia_diem);
                 if (!$diaDiem) return null;
                 return [
+                    'id'               => $lt->id,
                     'type'             => 'dia_diem',
                     'thu_tu_tham_quan' => $lt->thu_tu_tham_quan,
                     'thu_tu'           => $lt->thu_tu_tham_quan,
@@ -44,6 +46,7 @@ class LichTrinhDiaDiemController extends Controller
             } else {
                 // Free time
                 return [
+                    'id'               => $lt->id,
                     'type'             => 'free_time',
                     'thu_tu_tham_quan' => $lt->thu_tu_tham_quan,
                     'thu_tu'           => $lt->thu_tu_tham_quan,
@@ -146,5 +149,67 @@ class LichTrinhDiaDiemController extends Controller
             'status' => 'success', 
             'message' => 'Xóa lịch trình địa điểm thành công.'
         ], 200);
+    }
+
+    public function swapDiaDiem($id)
+    {
+        // 1. Lấy chi tiết lịch trình hiện tại
+        $lichTrinh = LichTrinhDiaDiem::find($id);
+        if (!$lichTrinh || !$lichTrinh->id_dia_diem) {
+            return response()->json(['status' => false, 'message' => 'Lịch trình không hợp lệ hoặc không có địa điểm.'], 404);
+        }
+
+        $chuyenDiId = $lichTrinh->id_chuyen_di;
+        $diaDiemHienTai = DiaDiem::find($lichTrinh->id_dia_diem);
+
+        // 2. Lấy danh sách ID các địa điểm ĐÃ CÓ trong chuyến đi để tránh trùng lặp
+        $diaDiemDaCo = LichTrinhDiaDiem::where('id_chuyen_di', $chuyenDiId)
+            ->whereNotNull('id_dia_diem')
+            ->pluck('id_dia_diem')->toArray();
+
+        // 3. Tìm các địa điểm thay thế: Cùng danh mục, không nằm trong danh sách đã có
+        $diaDiemThayThe = DiaDiem::where('loai_dia_diem', $diaDiemHienTai->loai_dia_diem)
+            ->whereNotIn('id', $diaDiemDaCo)
+            ->inRandomOrder() // Lấy ngẫu nhiên 1 cái để có sự đa dạng
+            ->first();
+
+        if (!$diaDiemThayThe) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Không tìm thấy địa điểm phù hợp để thay thế.'
+            ], 404);
+        }
+
+        // 4. Đổi địa điểm
+        $lichTrinh->id_dia_diem = $diaDiemThayThe->id;
+        $lichTrinh->save();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Thay đổi địa điểm thành công',
+            'data' => $lichTrinh
+        ]);
+    }
+
+    public function reorder(Request $request)
+    {
+        $items = $request->input('items', []);
+        foreach ($items as $item) {
+            $lichTrinh = LichTrinhDiaDiem::find($item['id']);
+            if ($lichTrinh) {
+                $lichTrinh->thu_tu_tham_quan = $item['thu_tu'];
+                if (isset($item['gio_bat_dau'])) {
+                    $lichTrinh->gio_bat_dau = $item['gio_bat_dau'];
+                }
+                if (isset($item['gio_ket_thuc'])) {
+                    $lichTrinh->gio_ket_thuc = $item['gio_ket_thuc'];
+                }
+                $lichTrinh->save();
+            }
+        }
+        return response()->json([
+            'status' => true,
+            'message' => 'Cập nhật thứ tự thành công.'
+        ]);
     }
 }

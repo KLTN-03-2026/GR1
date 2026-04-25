@@ -55,6 +55,8 @@ Route::prefix('client')->group(function () {
     Route::get('/chuyen-di/get-data', [\App\Http\Controllers\Api\ClientApiController::class, 'getChuyenDi'])->middleware('auth:sanctum');
     Route::post('/chuyen-di/delete', [\App\Http\Controllers\Api\ClientApiController::class, 'deleteChuyenDi'])->middleware('auth:sanctum');
     Route::post('/chi-tiet-chuyen-di/bulk-create', [\App\Http\Controllers\Api\ClientApiController::class, 'bulkCreateChiTiet'])->middleware('auth:sanctum');
+    Route::post('/chuyen-di/{id}/chot-lich-trinh', [\App\Http\Controllers\Api\ClientApiController::class, 'chotLichTrinh'])->middleware('auth:sanctum');
+    Route::get('/chuyen-di/{id}', [\App\Http\Controllers\Api\ClientApiController::class, 'getChiTietChuyenDi']);
 
     // API Nhóm du lịch
     Route::prefix('nhom-du-lich')->middleware('auth:sanctum')->group(function () {
@@ -270,6 +272,8 @@ Route::prefix('chuyen-dis')->group(function () {
 Route::prefix('lich-trinh-dia-diems')->group(function () {
     Route::get('/', [LichTrinhDiaDiemController::class, 'index']);
     Route::post('/', [LichTrinhDiaDiemController::class, 'store']);
+    Route::post('/reorder', [LichTrinhDiaDiemController::class, 'reorder']);
+    Route::post('/{id}/swap', [LichTrinhDiaDiemController::class, 'swapDiaDiem']);
     Route::get('/{lich_trinh}', [LichTrinhDiaDiemController::class, 'show']);
     Route::put('/{lich_trinh}', [LichTrinhDiaDiemController::class, 'update']);
     Route::delete('/{lich_trinh}', [LichTrinhDiaDiemController::class, 'destroy']);

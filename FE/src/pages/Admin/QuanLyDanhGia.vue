@@ -49,80 +49,84 @@
     </div>
 
     <!-- Bảng Dữ Liệu Đánh Giá -->
-    <div class="reviews-content-wrapper">
-      <div v-if="isLoading" class="loading-state glass-panel">
-        <div class="spinner"></div>
-        <p>Đang tải dữ liệu đánh giá...</p>
+    <div class="table-card">
+      <div class="table-head">
+        <h5><i class="bi bi-list-ul me-2"></i>Danh sách đánh giá địa điểm</h5>
       </div>
-      <div v-else-if="filteredReviews.length === 0" class="empty-state glass-panel">
-        <div class="empty-illustration">
-          <i class="bi bi-clipboard-x"></i>
+      <div class="table-responsive">
+        <div v-if="isLoading" class="text-center py-5 text-muted">
+          <div class="spinner"></div>
+          <p>Đang tải dữ liệu đánh giá...</p>
         </div>
-        <p>Không có đánh giá nào phù hợp với bộ lọc hiện tại.</p>
-      </div>
-      <table v-else class="reviews-table modern-table">
-        <thead>
-          <tr>
-            <th>Khách hàng</th>
-            <th>Địa điểm</th>
-            <th>Đánh giá</th>
-            <th class="col-content">Nội dung phản hồi</th>
-            <th>Trạng thái</th>
-            <th class="col-actions">Thao tác</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="review in filteredReviews" :key="review.id" class="table-row-card">
-            <td class="col-user">
-              <div class="user-info">
-                <div class="user-avatar gradient-avatar">
-                  {{ review.nguoi_dung?.ten?.charAt(0) || review.ten_nguoi_danh_gia?.charAt(0) || 'U' }}
-                </div>
-                <div class="user-details">
-                  <strong>{{ review.nguoi_dung?.ten || review.ten_nguoi_danh_gia || 'Người dùng ẩn danh' }}</strong>
+        <div v-else-if="filteredReviews.length === 0" class="text-center py-5 text-muted">
+          <i class="bi bi-clipboard-x fs-1"></i>
+          <p class="mt-2">Không có đánh giá nào phù hợp với bộ lọc hiện tại.</p>
+        </div>
+        <table v-else class="dg-table">
+          <thead>
+            <tr>
+              <th>Khách hàng</th>
+              <th>Địa điểm</th>
+              <th>Đánh giá</th>
+              <th>Nội dung phản hồi</th>
+              <th>Trạng thái</th>
+              <th>Thao tác</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="review in paginatedReviews" :key="review.id">
+              <td>
+                <div class="user-cell">
+                  <span class="user-name">{{ review.nguoi_dung?.ten || review.ten_nguoi_danh_gia || 'Người dùng ẩn danh' }}</span>
                   <span class="user-email">{{ review.nguoi_dung?.email || 'Đánh giá khách/Google' }}</span>
                 </div>
-              </div>
-            </td>
-            <td class="col-place">
-              <strong class="place-name">{{ review.dia_diem?.ten_dia_diem || 'Địa điểm đã bị xoá' }}</strong>
-            </td>
-            <td class="col-rating">
-              <div class="stars">
-                <i v-for="n in 5" :key="n" 
-                   :class="n <= review.so_sao ? 'bi bi-star-fill text-warning' : 'bi bi-star text-muted'"></i>
-              </div>
-            </td>
-            <td class="col-content">
-              <div class="review-text-container custom-scrollbar">
-                 <p class="review-text">{{ review.noi_dung || '(Không có văn bản)' }}</p>
-              </div>
-            </td>
-            <td class="col-status">
-              <div class="status-badge" :class="review.trang_thai == 1 ? 'approved' : 'pending'">
-                <span class="status-dot"></span>
-                {{ review.trang_thai == 1 ? 'Đã duyệt' : 'Chờ duyệt' }}
-              </div>
-            </td>
-            <td class="col-actions">
-              <div class="action-buttons">
-                <!-- Nút Duyệt / Ẩn -->
-                <button v-if="review.trang_thai == 0" class="btn-action btn-approve" @click="approveReview(review.id)" title="Duyệt cho phép hiển thị">
-                  <i class="bi bi-check-lg"></i>
-                </button>
-                <button v-else class="btn-action btn-hide" @click="hideReview(review.id)" title="Huỷ duyệt/ẩn đánh giá này">
-                  <i class="bi bi-eye-slash-fill"></i>
-                </button>
-                
-                <!-- Nút Xoá -->
-                <button class="btn-action btn-delete" @click="confirmDelete(review.id)" title="Xóa vĩnh viễn bài đánh giá">
-                  <i class="bi bi-trash3-fill"></i>
-                </button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+              </td>
+              <td>
+                <strong class="place-name">{{ review.dia_diem?.ten_dia_diem || 'Địa điểm đã bị xoá' }}</strong>
+              </td>
+              <td>
+                <span class="face-badge" style="background: #f8fbff; border: 1px solid #dbe3f0;">
+                  <span class="text-warning"><i class="bi bi-star-fill me-1"></i>{{ review.so_sao }}</span>
+                </span>
+              </td>
+              <td class="noi-dung-cell">
+                <span v-if="review.noi_dung">{{ review.noi_dung }}</span>
+                <span v-else class="text-muted small fst-italic">Không có nội dung</span>
+              </td>
+              <td>
+                <span class="status-badge" :class="review.trang_thai == 1 ? 'approved' : 'pending'">
+                  <span class="status-dot"></span>
+                  {{ review.trang_thai == 1 ? 'Đã duyệt' : 'Chờ duyệt' }}
+                </span>
+              </td>
+              <td>
+                <div class="action-buttons">
+                  <button v-if="review.trang_thai == 0" class="btn-action btn-approve" @click="approveReview(review.id)" title="Duyệt">
+                    <i class="bi bi-check-lg"></i>
+                  </button>
+                  <button v-else class="btn-action btn-hide" @click="hideReview(review.id)" title="Ẩn">
+                    <i class="bi bi-eye-slash-fill"></i>
+                  </button>
+                  <button class="btn-action btn-delete" @click="confirmDelete(review.id)" title="Xoá">
+                    <i class="bi bi-trash3-fill"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        
+        <!-- Pagination -->
+        <div v-if="totalPages > 1" class="dg-pagination">
+          <button :disabled="currentPage <= 1" @click="goPage(currentPage - 1)">
+            <i class="bi bi-chevron-left"></i>
+          </button>
+          <span>Trang {{ currentPage }} / {{ totalPages }}</span>
+          <button :disabled="currentPage >= totalPages" @click="goPage(currentPage + 1)">
+            <i class="bi bi-chevron-right"></i>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -136,13 +140,27 @@ export default {
     return {
       isLoading: true,
       filterStatus: 'all',
-      allReviews: []
+      allReviews: [],
+      currentPage: 1,
+      itemsPerPage: 10
+    }
+  },
+  watch: {
+    filterStatus() {
+      this.currentPage = 1;
     }
   },
   computed: {
     filteredReviews() {
       if (this.filterStatus === 'all') return this.allReviews;
       return this.allReviews.filter(r => r.trang_thai == this.filterStatus);
+    },
+    totalPages() {
+      return Math.ceil(this.filteredReviews.length / this.itemsPerPage) || 1;
+    },
+    paginatedReviews() {
+      const start = (this.currentPage - 1) * this.itemsPerPage;
+      return this.filteredReviews.slice(start, start + this.itemsPerPage);
     },
     pendingCount() {
       return this.allReviews.filter(r => r.trang_thai == 0).length;
@@ -155,6 +173,11 @@ export default {
     this.fetchReviews();
   },
   methods: {
+    goPage(page) {
+      if (page >= 1 && page <= this.totalPages) {
+        this.currentPage = page;
+      }
+    },
     async fetchReviews() {
       this.isLoading = true;
       try {
@@ -242,7 +265,8 @@ export default {
 /* =========== Nền Typography (Premium Feel) =========== */
 .admin-reviews-container {
   padding: 2rem;
-  background-color: #f6f8fa; /* Nền xám nhạt, sang & sạch hơn */
+  background-color: #f6f8fa;
+  /* Nền xám nhạt, sang & sạch hơn */
   min-height: 100vh;
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   color: #334155;
@@ -287,7 +311,7 @@ export default {
   color: #475569;
   outline: none;
   font-size: 0.85rem;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
   cursor: pointer;
   min-width: 170px;
   -webkit-appearance: none;
@@ -300,7 +324,8 @@ export default {
   background-size: 0.9em;
 }
 
-.status-filter:hover, .status-filter:focus {
+.status-filter:hover,
+.status-filter:focus {
   border-color: #94a3b8;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04);
 }
@@ -320,7 +345,7 @@ export default {
   display: flex;
   align-items: center;
   gap: 1.25rem;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0,0,0, 0.01);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02), 0 1px 2px rgba(0, 0, 0, 0.01);
   border: 1px solid #f1f5f9;
   transition: all 0.25s ease;
 }
@@ -340,9 +365,20 @@ export default {
   font-size: 1.3rem;
 }
 
-.pending-card .stat-icon-wrapper { background: #fffbeb; color: #d97706; }
-.approved-card .stat-icon-wrapper { background: #f0fdf4; color: #059669; }
-.total-card .stat-icon-wrapper { background: #eff6ff; color: #4f46e5; }
+.pending-card .stat-icon-wrapper {
+  background: #fffbeb;
+  color: #d97706;
+}
+
+.approved-card .stat-icon-wrapper {
+  background: #f0fdf4;
+  color: #059669;
+}
+
+.total-card .stat-icon-wrapper {
+  background: #eff6ff;
+  color: #4f46e5;
+}
 
 .stat-info h3 {
   font-size: 0.75rem;
@@ -361,127 +397,38 @@ export default {
   line-height: 1;
 }
 
-/* =========== Thiết kế Bảng Hiện Đại (Rows overlay) =========== */
-.reviews-content-wrapper {
-  position: relative;
-  z-index: 1;
-}
-
-.modern-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0 0.6rem; /* Khoảng cách row tinh tế hơn */
-  text-align: left;
-}
-
-.modern-table th {
-  padding: 0 1.25rem 0.6rem 1.25rem;
-  font-weight: 600;
-  color: #475569;
-  font-size: 0.75rem; /* Header typography nhỏ, pro */
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.table-row-card {
-  background: white;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-  transition: all 0.2s ease;
-}
-
-.table-row-card:hover {
-  box-shadow: 0 8px 16px rgba(0,0,0,0.04);
-  background-color: #fafbfc;
-}
-
-.table-row-card td {
-  padding: 1.1rem 1.25rem; /* Padding vừa vặn, không quá trống */
-  border-top: 1px solid #f8fafc;
-  border-bottom: 1px solid #f8fafc;
-  vertical-align: top; /* Để text content dài hiển thị mượt */
-}
-
-.table-row-card td:first-child {
-  border-radius: 10px 0 0 10px;
-  border-left: 1px solid #f8fafc;
-}
-
-.table-row-card td:last-child {
-  border-radius: 0 10px 10px 0;
-  border-right: 1px solid #f8fafc;
-}
-
-/* Cột Kích Thước */
-.col-user { width: 18%; }
-.col-place { width: 16%; }
-.col-rating { width: 12%; }
-.col-content { width: 35%; /* Fixed width to limit overflow */ }
-.col-status { width: 10%; }
-.col-actions { width: 9%; text-align: right; }
-
-/* Info Người dùng */
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.gradient-avatar {
-  flex-shrink: 0;
-  width: 36px;
-  height: 36px;
-  background: linear-gradient(135deg, #a5b4fc, #6366f1);
-  color: white;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 0.95rem;
-  box-shadow: 0 2px 4px rgba(99, 102, 241, 0.2);
-}
-
-.user-details {
-  display: flex;
-  flex-direction: column;
-}
-
-.user-details strong {
-  color: #1e293b;
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-
-.user-email {
-  color: #64748b;
-  font-size: 0.75rem;
-}
-
 .place-name {
   color: #1e293b;
   font-size: 0.85rem;
   font-weight: 600;
 }
 
-/* Trạng Thái Sao */
-.stars {
-  display: inline-flex;
-  gap: 2px;
-  padding-top: 0.15rem;
+/* Table Style from DanhGiaHaiLong */
+.table-card { background: #fff; border-radius: 1.2rem; box-shadow: 0 4px 16px rgba(30,45,68,.07); overflow: hidden; }
+.table-head {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;
+  padding: 1.2rem 1.4rem; border-bottom: 1px solid #f0f4f8;
 }
+.table-head h5 { margin: 0; font-size: 1rem; font-weight: 700; }
+.dg-table { width: 100%; border-collapse: collapse; }
+.dg-table th { background: #f8fbff; padding: .75rem 1rem; font-size: .82rem; font-weight: 700; color: #627289; text-align: left; border-bottom: 1px solid #e8edf5; white-space: nowrap; }
+.dg-table td { padding: .75rem 1rem; border-bottom: 1px solid #f0f4f8; font-size: .875rem; vertical-align: middle; }
+.dg-table tbody tr:hover { background: #f8fbff; }
 
-.stars i {
-  font-size: 0.9rem;
-}
-
-.text-warning { color: #f59e0b; }
-.text-muted { color: #e2e8f0; }
+.face-badge { display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .65rem; border-radius: .5rem; font-weight: 600; font-size: .82rem; }
+.user-cell { display: flex; flex-direction: column; gap: .1rem; }
+.user-name  { font-weight: 600; font-size: .875rem; }
+.user-email { font-size: .75rem; color: #94a3b8; }
+.noi-dung-cell { max-width: 300px; }
 
 /* =========== Thiết kế thanh Scroll gọn gàng & Text =========== */
 .review-text-container {
-  max-height: 85px; /* Giới hạn độ giãn nở */
-  overflow-y: auto; /* Cho phép cuộn nếu quá dài */
-  padding-right: 8px; /* Tránh sát mép scrollbar */
+  max-height: 85px;
+  /* Giới hạn độ giãn nở */
+  overflow-y: auto;
+  /* Cho phép cuộn nếu quá dài */
+  padding-right: 8px;
+  /* Tránh sát mép scrollbar */
   margin-top: -0.15rem;
 }
 
@@ -489,13 +436,16 @@ export default {
 .custom-scrollbar::-webkit-scrollbar {
   width: 3px;
 }
+
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
+
 .custom-scrollbar::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 10px;
 }
+
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
@@ -531,19 +481,24 @@ export default {
   background: #fffbeb;
   color: #92400e;
 }
-.status-badge.pending .status-dot { background: #f59e0b; }
+
+.status-badge.pending .status-dot {
+  background: #f59e0b;
+}
 
 .status-badge.approved {
   background: #f0fdf4;
   color: #166534;
 }
-.status-badge.approved .status-dot { background: #10b981; }
+
+.status-badge.approved .status-dot {
+  background: #10b981;
+}
 
 /* Các nút hành động */
 .action-buttons {
   display: flex;
   gap: 0.4rem;
-  justify-content: flex-end;
 }
 
 .btn-action {
@@ -589,52 +544,10 @@ export default {
   color: #fff;
 }
 
-/* Loading & Empty State */
-.glass-panel {
-  background: #ffffff;
-  border-radius: 12px;
-  padding: 3rem 2rem;
-  text-align: center;
-  color: #64748b;
-  border: 1px solid #f1f5f9;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-}
-
-.loading-state, .empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-weight: 500;
-  font-size: 0.95rem;
-}
-
-.spinner {
-  width: 36px;
-  height: 36px;
-  border: 3px solid #f1f5f9;
-  border-top: 3px solid #6366f1;
-  border-radius: 50%;
-  animation: loadspin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  margin-bottom: 1rem;
-}
-
-@keyframes loadspin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.empty-illustration {
-  font-size: 2.5rem;
-  color: #cbd5e1;
-  margin-bottom: 1rem;
-  background: #f8fafc;
-  width: 70px;
-  height: 70px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
-}
+/* Pagination */
+.dg-pagination { display: flex; align-items: center; justify-content: center; gap: 1rem; padding: 1rem; border-top: 1px solid #f0f4f8; }
+.dg-pagination button { background: #fff; border: 1.5px solid #dbe3f0; border-radius: .6rem; padding: .4rem .8rem; cursor: pointer; font-size: .9rem; transition: all .2s; }
+.dg-pagination button:hover:not(:disabled) { border-color: #10b981; color: #10b981; }
+.dg-pagination button:disabled { opacity: .4; cursor: not-allowed; }
+.dg-pagination span { font-size: .88rem; font-weight: 600; color: #627289; }
 </style>
