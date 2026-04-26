@@ -26,10 +26,10 @@
             <button class="btn btn-outline-secondary rounded-pill px-3 py-2 fw-bold d-flex align-items-center" @click="$router.push('/lich-trinh-cua-toi')">
               <i class="bi bi-arrow-left me-2"></i>Quay lại
             </button>
-            <button v-if="trip.is_leader && !isFinalized" class="btn btn-danger rounded-pill px-4 py-2 border-0 fw-bold shadow-sm d-flex align-items-center" @click="finalizeTrip">
+            <button v-if="trip.is_leader && !isFinalized" class="btn btn-danger rounded-pill px-4 py-2 border-0 fw-bold shadow-sm d-flex align-items-center" @click="openFinalizeModal">
               <i class="bi bi-lock-fill me-2"></i> Lưu & kết thúc
             </button>
-            <button v-if="trip.is_leader && isFinalized" class="btn btn-warning rounded-pill px-4 py-2 border-0 fw-bold shadow-sm d-flex align-items-center" @click="unfinalizeTrip">
+            <button v-if="trip.is_leader && isFinalized" class="btn btn-warning rounded-pill px-4 py-2 border-0 fw-bold shadow-sm d-flex align-items-center" @click="openUnfinalizeModal">
               <i class="bi bi-unlock-fill me-2"></i> Mở lại để sửa
             </button>
             <button class="btn btn-outline-primary rounded-pill px-3 py-2 fw-bold d-flex align-items-center" @click="exportPDF">
@@ -246,6 +246,31 @@
     </div>
 
     <!-- Modal chọn nhóm chia sẻ -->
+    <div
+      v-if="scheduleConfirmModal.show"
+      class="schedule-confirm-overlay"
+      @click.self="closeScheduleConfirmModal"
+    >
+      <div class="schedule-confirm-box">
+        <button class="btn-close position-absolute top-0 end-0 m-4" @click="closeScheduleConfirmModal"></button>
+        <div class="schedule-confirm-icon" :class="scheduleConfirmModal.variant">
+          <i :class="scheduleConfirmModal.icon"></i>
+        </div>
+        <h4 class="schedule-confirm-title">{{ scheduleConfirmModal.title }}</h4>
+        <p class="schedule-confirm-message">{{ scheduleConfirmModal.message }}</p>
+        <div class="schedule-confirm-actions">
+          <button class="schedule-confirm-cancel" @click="closeScheduleConfirmModal">Hủy</button>
+          <button
+            class="schedule-confirm-submit"
+            :class="scheduleConfirmModal.variant"
+            @click="confirmScheduleAction"
+          >
+            {{ scheduleConfirmModal.confirmText }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="showShareModal" class="share-modal-overlay d-flex align-items-center justify-content-center" @click.self="showShareModal = false">
       <div class="share-modal-box bg-white p-5 rounded-4 shadow-lg w-100 animate-in position-relative" style="max-width: 440px;">
         <button class="btn-close position-absolute top-0 end-0 m-4" @click="showShareModal = false"></button>
@@ -422,6 +447,15 @@ export default {
       myJoinedGroups: [],
       selectedGroupToShare: null,
       sendingShare: false,
+      scheduleConfirmModal: {
+        show: false,
+        action: null,
+        title: '',
+        message: '',
+        confirmText: '',
+        icon: '',
+        variant: 'danger',
+      },
       
       showRatingModal: false,
       selectedRating: null,
@@ -516,6 +550,41 @@ export default {
   },
 
   methods: {
+    openFinalizeModal() {
+      this.scheduleConfirmModal = {
+        show: true,
+        action: 'finalize',
+        title: 'Chốt lịch trình',
+        message: 'Bạn có chắc chắn muốn chốt lịch trình này? Các thành viên sẽ không thể chỉnh sửa sau khi chốt.',
+        confirmText: 'Chốt lịch trình',
+        icon: 'bi bi-lock-fill',
+        variant: 'danger',
+      };
+    },
+
+    openUnfinalizeModal() {
+      this.scheduleConfirmModal = {
+        show: true,
+        action: 'unfinalize',
+        title: 'Mở lại lịch trình',
+        message: 'Bạn có muốn mở lại lịch trình để chỉnh sửa?',
+        confirmText: 'Mở lại',
+        icon: 'bi bi-unlock-fill',
+        variant: 'warning',
+      };
+    },
+
+    closeScheduleConfirmModal() {
+      this.scheduleConfirmModal.show = false;
+    },
+
+    confirmScheduleAction() {
+      const action = this.scheduleConfirmModal.action;
+      this.closeScheduleConfirmModal();
+      if (action === 'finalize') this.finalizeTrip();
+      if (action === 'unfinalize') this.unfinalizeTrip();
+    },
+
     async fetchTripData() {
       this.loading = true;
       try {
@@ -779,7 +848,6 @@ export default {
 
     // ─── Modal & Chia sẻ ────────────────────────────────
     async finalizeTrip() {
-        if (!confirm('Bạn có chắc chắn muốn chốt lịch trình này? Các thành viên sẽ không thể chỉnh sửa sau khi chốt.')) return;
         try {
             const res = await fetch(`${BASE}/client/chuyen-di/${this.tripId}/chot-lich-trinh`, {
                 method: 'POST',
@@ -801,7 +869,6 @@ export default {
     },
 
     async unfinalizeTrip() {
-        if (!confirm('Bạn có muốn mở lại lịch trình để chỉnh sửa?')) return;
         try {
             const res = await fetch(`${BASE}/client/chuyen-di/${this.tripId}/mo-lich-trinh`, {
                 method: 'POST',
@@ -1326,6 +1393,93 @@ export default {
 }
 
 /* Modal chia sẻ */
+.schedule-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1080;
+  background: rgba(15, 23, 42, 0.62);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+.schedule-confirm-box {
+  width: 100%;
+  max-width: 460px;
+  background: #fff;
+  border-radius: 1.5rem;
+  padding: 2rem 1.75rem 1.5rem;
+  position: relative;
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.28);
+  animation: modalBounceIn 0.35s ease both;
+}
+.schedule-confirm-icon {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 1rem;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+}
+.schedule-confirm-icon.danger {
+  color: #b91c1c;
+  background: linear-gradient(135deg, #fee2e2, #fecaca);
+}
+.schedule-confirm-icon.warning {
+  color: #a16207;
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+}
+.schedule-confirm-title {
+  margin-bottom: 0.65rem;
+  text-align: center;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+.schedule-confirm-message {
+  margin: 0;
+  text-align: center;
+  color: #475569;
+  font-size: 0.97rem;
+  line-height: 1.6;
+}
+.schedule-confirm-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+}
+.schedule-confirm-cancel,
+.schedule-confirm-submit {
+  border: none;
+  border-radius: 999px;
+  padding: 0.78rem 1.2rem;
+  font-weight: 700;
+  font-size: 0.93rem;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+.schedule-confirm-cancel {
+  background: #f1f5f9;
+  color: #334155;
+}
+.schedule-confirm-submit {
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+}
+.schedule-confirm-submit.danger {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+}
+.schedule-confirm-submit.warning {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+.schedule-confirm-cancel:hover,
+.schedule-confirm-submit:hover {
+  transform: translateY(-1px);
+}
+
 .share-modal-overlay {
   position: fixed; inset: 0; background: rgba(15, 23, 42, 0.65); z-index: 1050; backdrop-filter: blur(8px);
 }
@@ -1392,3 +1546,4 @@ export default {
 .fade-slide-enter-active, .fade-slide-leave-active { transition: all 0.3s ease; }
 .fade-slide-enter-from, .fade-slide-leave-to { opacity: 0; transform: translateY(-8px); }
 </style>
+
