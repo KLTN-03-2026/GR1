@@ -95,7 +95,7 @@
           <div class="ai-gen-wrapper">
             <button class="btn-outline-brand-lg w-100" @click="generateByAI" :disabled="loadingAI">
               <span v-if="loadingAI" class="spinner-border spinner-border-sm me-2"></span>
-              <i v-else class="bi bi-magic me-2"></i> Tạo lịch trình thông minh (Algorithm + AI)
+              <i v-else class="bi bi-magic me-2"></i> Tạo lịch trình thông minh
             </button>
             <div v-if="loadingAI" class="ai-progress-status mt-3 p-3 rounded"
               style="background: #f0f7ff; border: 1px solid #cce5ff;">
@@ -276,13 +276,6 @@
                       </div>
                     </div>
                     <div class="tc-order-btns">
-                      <button @click="moveItem(activeDayTab - 1, idx, -1)" :disabled="idx === 0" title="Lên">
-                        <i class="bi bi-arrow-up"></i>
-                      </button>
-                      <button @click="moveItem(activeDayTab - 1, idx, 1)"
-                        :disabled="idx === lichTrinhTheoNgay[activeDayTab - 1].length - 1" title="Xuống">
-                        <i class="bi bi-arrow-down"></i>
-                      </button>
                       <button class="btn-remove" @click="removeItem(activeDayTab - 1, idx)" title="Xóa">
                         <i class="bi bi-trash3"></i>
                       </button>
@@ -1181,16 +1174,7 @@ export default {
       });
     },
 
-    // ─── Di chuyển & xóa item trong lịch trình ──
-    moveItem(dayIdx, itemIdx, direction) {
-      const day = this.lichTrinhTheoNgay[dayIdx];
-      const target = itemIdx + direction;
-      if (target < 0 || target >= day.length) return;
-      const tmp = day[target];
-      day[target] = day[itemIdx];
-      day[itemIdx] = tmp;
-    },
-
+    // ─── Xóa item trong lịch trình ──
     removeItem(dayIdx, itemIdx) {
       this.lichTrinhTheoNgay[dayIdx].splice(itemIdx, 1);
     },

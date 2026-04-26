@@ -65,10 +65,26 @@ class NhomChatController extends Controller
             ], 403);
         }
 
+        $message = (string) $request->input('message');
+        
+        // Tự động gắn id_nhom_du_lich cho chuyến đi nếu đây là tin nhắn share lịch trình
+        try {
+            $msgData = json_decode($message, true);
+            if ($msgData && isset($msgData['type']) && $msgData['type'] === 'itinerary' && isset($msgData['id'])) {
+                $chuyenDi = \App\Models\ChuyenDi::find($msgData['id']);
+                if ($chuyenDi && !$chuyenDi->id_nhom_du_lich) {
+                    $chuyenDi->id_nhom_du_lich = $request->integer('id_nhom_du_lich');
+                    $chuyenDi->save();
+                }
+            }
+        } catch (\Exception $e) {
+            // Bỏ qua lỗi parse JSON nếu tin nhắn là text thường
+        }
+
         $nhomChat = NhomChat::create([
             'id_nhom_du_lich' => $request->integer('id_nhom_du_lich'),
             'id_chi_tiet_nhom' => $request->integer('id_chi_tiet_nhom'),
-            'message' => (string) $request->input('message'),
+            'message' => $message,
         ]);
 
         $nhomChat->setRelation('chiTietNhom', $chiTietNhom);

@@ -202,22 +202,55 @@ class ClientApiController extends Controller
             return response()->json(['status' => false, 'message' => 'Không tìm thấy chuyến đi.'], 200);
         }
 
-        if (!$chuyenDi->id_nhom_du_lich) {
-            return response()->json(['status' => false, 'message' => 'Chuyến đi không thuộc nhóm nào.'], 200);
-        }
+        // Nếu chuyến đi trong nhóm, kiểm tra quyền trưởng nhóm
+        if ($chuyenDi->id_nhom_du_lich) {
+            $chiTietNhom = \App\Models\ChiTietNhom::where('id_nguoi_dung', $userId)
+                ->where('id_nhom_du_lich', $chuyenDi->id_nhom_du_lich)
+                ->first();
 
-        $chiTietNhom = \App\Models\ChiTietNhom::where('id_nguoi_dung', $userId)
-            ->where('id_nhom_du_lich', $chuyenDi->id_nhom_du_lich)
-            ->first();
-
-        if (!$chiTietNhom || $chiTietNhom->vai_tro !== 'truong_nhom') {
-            return response()->json(['status' => false, 'message' => 'Chỉ trưởng nhóm mới có quyền chốt lịch trình.'], 200);
+            if (!$chiTietNhom || $chiTietNhom->vai_tro !== 'truong_nhom') {
+                return response()->json(['status' => false, 'message' => 'Chỉ trưởng nhóm mới có quyền chốt lịch trình.'], 200);
+            }
+        } else {
+            // Nếu không trong nhóm, kiểm tra quyền chủ sở hữu
+            if ($chuyenDi->id_nguoi_dung != $userId) {
+                return response()->json(['status' => false, 'message' => 'Bạn không có quyền chốt lịch trình này.'], 200);
+            }
         }
 
         $chuyenDi->trang_thai = 2; // 2: Đã chốt
         $chuyenDi->save();
 
         return response()->json(['status' => true, 'message' => 'Đã chốt lịch trình thành công.']);
+    }
+
+    public function moLichTrinh($id)
+    {
+        $userId = auth('sanctum')->id();
+        $chuyenDi = ChuyenDi::find($id);
+
+        if (!$chuyenDi) {
+            return response()->json(['status' => false, 'message' => 'Không tìm thấy chuyến đi.'], 200);
+        }
+
+        if ($chuyenDi->id_nhom_du_lich) {
+            $chiTietNhom = \App\Models\ChiTietNhom::where('id_nguoi_dung', $userId)
+                ->where('id_nhom_du_lich', $chuyenDi->id_nhom_du_lich)
+                ->first();
+
+            if (!$chiTietNhom || $chiTietNhom->vai_tro !== 'truong_nhom') {
+                return response()->json(['status' => false, 'message' => 'Chỉ trưởng nhóm mới có quyền mở lại lịch trình.'], 200);
+            }
+        } else {
+            if ($chuyenDi->id_nguoi_dung != $userId) {
+                return response()->json(['status' => false, 'message' => 'Bạn không có quyền mở lại lịch trình này.'], 200);
+            }
+        }
+
+        $chuyenDi->trang_thai = 1; // 1: Mở lại để sửa
+        $chuyenDi->save();
+
+        return response()->json(['status' => true, 'message' => 'Đã mở lại lịch trình thành công.']);
     }
 
     /**

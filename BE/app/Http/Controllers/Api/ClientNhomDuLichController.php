@@ -326,6 +326,13 @@ class ClientNhomDuLichController extends Controller
         $nhom->id_chuyen_di = $idChuyenDi;
         $nhom->save();
 
+        // Cập nhật id_nhom_du_lich cho chuyến đi để phân quyền
+        $chuyenDi = \App\Models\ChuyenDi::find($idChuyenDi);
+        if ($chuyenDi) {
+            $chuyenDi->id_nhom_du_lich = $id;
+            $chuyenDi->save();
+        }
+
         return response()->json([
             'status' => true,
             'message' => 'Đã cập nhật lịch trình nhóm thành công.',
