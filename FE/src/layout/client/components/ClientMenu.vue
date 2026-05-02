@@ -36,6 +36,12 @@
           <li class="nav-item">
             <router-link to="/nhom-du-lich" class="nav-link">Nhóm du lịch</router-link>
           </li>
+
+          <li v-if="isLoggedIn" class="nav-item">
+            <router-link to="/lich-trinh-cua-toi" class="nav-link">
+              <i class="bi bi-map me-1"></i>Lịch trình của tôi
+            </router-link>
+          </li>
         </ul>
 
         <div class="d-flex align-items-center gap-2">
@@ -81,11 +87,7 @@
                   <i class="bi bi-person-circle text-primary"></i> Thông tin cá nhân
                 </router-link>
               </li>
-              <li>
-                <router-link to="/lich-trinh-cua-toi" class="dropdown-item d-flex align-items-center gap-2">
-                  <i class="bi bi-map text-success"></i> Lịch trình của tôi
-                </router-link>
-              </li>
+
               <li>
                 <router-link to="/yeu-thich" class="dropdown-item d-flex align-items-center gap-2">
                   <i class="bi bi-heart-fill text-danger"></i> Địa điểm yêu thích
