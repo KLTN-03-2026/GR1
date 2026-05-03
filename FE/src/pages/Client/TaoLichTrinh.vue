@@ -1129,37 +1129,37 @@ export default {
         handle: '.timeline-card',
         ghostClass: 'sortable-ghost',
         onEnd: (evt) => {
+          if (evt.oldIndex === evt.newIndex) return;
           const dayIdx = this.activeDayTab - 1;
           const dayItems = [...this.lichTrinhTheoNgay[dayIdx]];
-          const item = dayItems.splice(evt.oldIndex, 1)[0];
-          dayItems.splice(evt.newIndex, 0, item);
 
-          // Tính lại giờ dựa trên Haversine
-          const haversine = (lat1, lon1, lat2, lon2) => {
-            if (!lat1 || !lon1 || !lat2 || !lon2) return 5;
-            const R = 6371, dL = (lat2 - lat1) * Math.PI / 180, dN = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dL/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dN/2)**2;
-            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-          };
-          const fmt = m => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+          // Lưu lại thời gian theo từng VỊ TRÍ (không theo item)
+          const timeSlots = dayItems.map(it => ({
+            gio_bat_dau: it.gio_bat_dau || it.gio,
+            gio_ket_thuc: it.gio_ket_thuc,
+            thoi_luong_phut: it.thoi_luong_phut || 60,
+          }));
 
-          let curMin = 6*60+30;
-          let prevLat = null, prevLng = null;
-          dayItems.forEach((it) => {
+          // Di chuyển item sang vị trí mới
+          const moved = dayItems.splice(evt.oldIndex, 1)[0];
+          dayItems.splice(evt.newIndex, 0, moved);
+
+          // Gán lại giờ một cách tuần tự từ trên xuống dưới
+          const fmt = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+          const toMin = t => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+
+          let currentMin = timeSlots.length > 0 ? toMin(timeSlots[0].gio_bat_dau) : 6 * 60 + 30;
+
+          dayItems.forEach((it, idx) => {
+            const travelAdd = (idx > 0) ? 15 : 0; // Thời gian di chuyển 15 phút
+            const startMin = currentMin + travelAdd;
             const dur = it.thoi_luong_phut || 60;
-            let travelMin = 12;
-            if (prevLat !== null && it.vi_do && it.kinh_do) {
-              const dist = haversine(prevLat, prevLng, parseFloat(it.vi_do), parseFloat(it.kinh_do));
-              travelMin = Math.max(5, Math.min(40, Math.ceil(dist / 20 * 60) + 5));
-            }
-            const startMin = curMin + (prevLat !== null ? travelMin : 0);
-            const endMin = startMin + dur;
+            
             it.gio = fmt(startMin);
             it.gio_bat_dau = fmt(startMin);
-            it.gio_ket_thuc = fmt(endMin);
-            curMin = endMin;
-            prevLat = parseFloat(it.vi_do) || prevLat;
-            prevLng = parseFloat(it.kinh_do) || prevLng;
+            it.gio_ket_thuc = fmt(startMin + dur);
+            
+            currentMin = startMin + dur;
           });
 
           this.lichTrinhTheoNgay[dayIdx] = dayItems;
@@ -1190,36 +1190,27 @@ export default {
       });
     },
 
-    // ─── Tái tính giờ cho 1 ngày sau khi thêm/xóa ──
+    // ─── Tái tính giờ sau khi thêm/xóa (giữ nguyên slot, chỉ bù nhỏ) ──
     recalcDayTimes(dayIdx) {
       const fmt = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-      const haversine = (lat1, lon1, lat2, lon2) => {
-        if (!lat1 || !lon1 || !lat2 || !lon2) return 5;
-        const R = 6371, dLat = (lat2 - lat1) * Math.PI / 180, dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      };
-
+      const toMin = t => { if (!t) return 7 * 60; const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
       const day = this.lichTrinhTheoNgay[dayIdx];
       if (!day || day.length === 0) return;
 
-      let curMin = 7 * 60; // 07:00 mặc định cho ngày
-      let curLat = 16.0544, curLng = 108.2022;
-
-      day.forEach(item => {
-        const dist = haversine(curLat, curLng, parseFloat(item.vi_do) || curLat, parseFloat(item.kinh_do) || curLng);
-        const travelMin = Math.max(5, Math.min(30, Math.ceil(dist / 20 * 60) + 5));
-        const startMin = curMin + travelMin;
+      // Với mỗi item: giữ nguyên giờ bắt đầu, chỉ tính lại gio_ket_thuc từ dur
+      // Nếu 2 item liền nhau bị trùng giờ thì cộng thêm 5-10 phút
+      day.forEach((item, idx) => {
+        let startMin = toMin(item.gio_bat_dau || item.gio);
+        if (idx > 0) {
+          const prevEnd = toMin(day[idx - 1].gio_ket_thuc);
+          if (startMin < prevEnd + 5) {
+            startMin = prevEnd + 7; // đẩy lên 7 phút sau item trước
+          }
+        }
         const dur = item.thoi_luong_phut || 60;
-        const endMin = startMin + dur;
-
         item.gio = fmt(startMin);
         item.gio_bat_dau = fmt(startMin);
-        item.gio_ket_thuc = fmt(endMin);
-
-        curLat = parseFloat(item.vi_do) || curLat;
-        curLng = parseFloat(item.kinh_do) || curLng;
-        curMin = endMin;
+        item.gio_ket_thuc = fmt(startMin + dur);
       });
     },
 

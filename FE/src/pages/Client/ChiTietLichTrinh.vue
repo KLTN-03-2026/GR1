@@ -1139,14 +1139,15 @@ export default {
       this.addPlacePanel.addingId = place.id;
 
       try {
-        // Tính giờ bắt đầu dựa trên item cuối cùng của ngày
+        // Tính giờ bắt đầu dựa trên item cuối cùng của ngày (sau khi sort theo thời gian)
         const dayItems = this.lichTrinhTheoNgay[dayIdx] || [];
         let startMin = 8 * 60; // Mặc định 08:00
         if (dayItems.length > 0) {
-          const lastItem = dayItems[dayItems.length - 1];
-          const endTime = lastItem.gio_ket_thuc || lastItem.gio_bat_dau || '08:00';
-          const [h, m] = endTime.split(':').map(Number);
-          startMin = h * 60 + m + 30; // +30 phút di chuyển
+          const toMin = t => { if (!t) return 0; const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
+          const sorted = [...dayItems].sort((a, b) => toMin(a.gio_bat_dau || a.gio) - toMin(b.gio_bat_dau || b.gio));
+          const lastItem = sorted[sorted.length - 1];
+          const endTimeMin = toMin(lastItem.gio_ket_thuc || lastItem.gio_bat_dau || '08:00');
+          startMin = endTimeMin + 15; // +15 phút di chuyển
         }
         const fmt = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
         const thuTu = (dayIdx * 100) + dayItems.length + 1;
@@ -1538,61 +1539,54 @@ export default {
 
           const dayIdx = this.activeDayTab - 1;
           const dayItems = [...this.lichTrinhTheoNgay[dayIdx]];
+
+          // Lưu lại thời gian theo từng VỊ TRÍ trước khi di chuyển
+          const timeSlots = dayItems.map(it => ({
+            gio_bat_dau: it.gio_bat_dau || it.gio,
+            gio_ket_thuc: it.gio_ket_thuc,
+            thoi_luong_phut: it.thoi_luong_phut || 60,
+          }));
+
+          // Di chuyển item sang vị trí mới
           const movedItem = dayItems.splice(evt.oldIndex, 1)[0];
           dayItems.splice(evt.newIndex, 0, movedItem);
 
-          // Tính lại giờ dựa trên Haversine (giống bên Tạo lịch trình)
-          const haversine = (lat1, lon1, lat2, lon2) => {
-            if (!lat1 || !lon1 || !lat2 || !lon2) return 5;
-            const R = 6371, dL = (lat2 - lat1) * Math.PI / 180, dN = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dL/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dN/2)**2;
-            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-          };
-          const fmt = m => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+          // Gán lại giờ một cách tuần tự từ trên xuống dưới
+          // Giữ nguyên giờ bắt đầu của item đầu tiên, các item sau nối tiếp nhau
+          const fmt = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+          const toMin = t => { if (!t) return 0; const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
 
-          let curMin = 6*60+30; // Mặc định bắt đầu từ 6:30 sáng
-          let prevLat = null, prevLng = null;
-          
+          let currentMin = timeSlots.length > 0 ? toMin(timeSlots[0].gio_bat_dau) : 6 * 60 + 30;
+
           dayItems.forEach((it, idx) => {
-            const dur = it.thoi_luong_phut || 60;
-            let travelMin = 12;
-            if (prevLat !== null && it.vi_do && it.kinh_do) {
-              const dist = haversine(prevLat, prevLng, parseFloat(it.vi_do), parseFloat(it.kinh_do));
-              travelMin = Math.max(5, Math.min(40, Math.ceil(dist / 20 * 60) + 5));
-            }
-            const startMin = curMin + (prevLat !== null ? travelMin : 0);
-            const endMin = startMin + dur;
+            const travelAdd = (idx > 0) ? 15 : 0; // Thời gian di chuyển ước tính là 15 phút
+            const startMin = currentMin + travelAdd;
+            const dur = it.thoi_luong_phut || 60; // Lấy thời lượng của địa điểm, mặc định 60p
             
             it.gio_bat_dau = fmt(startMin);
-            it.gio_ket_thuc = fmt(endMin);
+            it.gio_ket_thuc = fmt(startMin + dur);
             it.thu_tu_tham_quan = dayIdx * 100 + idx + 1;
             
-            curMin = endMin;
-            prevLat = parseFloat(it.vi_do) || prevLat;
-            prevLng = parseFloat(it.kinh_do) || prevLng;
+            // Cập nhật currentMin cho item tiếp theo
+            currentMin = startMin + dur;
           });
 
           this.lichTrinhTheoNgay.splice(dayIdx, 1, dayItems);
           this.$nextTick(() => { this.renderMapForDay(dayIdx); });
-          
-          // Save to DB
+
+          // Lưu thứ tự + giờ mới lên DB
           const apiPayload = dayItems.map(it => ({
-              id: it.id,
-              thu_tu: it.thu_tu_tham_quan,
-              gio_bat_dau: it.gio_bat_dau,
-              gio_ket_thuc: it.gio_ket_thuc
+            id: it.id,
+            thu_tu: it.thu_tu_tham_quan,
+            gio_bat_dau: it.gio_bat_dau,
+            gio_ket_thuc: it.gio_ket_thuc,
           }));
 
           try {
-              this.$toast.info('Đang cập nhật thứ tự...');
-              await api.post('/lich-trinh-dia-diems/reorder', { items: apiPayload });
-              
-              // AI tối ưu lại sau khi di chuyển
-              this.$toast.info('AI đang tối ưu lại lịch trình chuyên sâu...');
-              this.reorderWithAi(); 
-              
-          } catch(err) {
-              this.$toast.error('Lỗi khi lưu lịch trình');
+            await api.post('/lich-trinh-dia-diems/reorder', { items: apiPayload });
+            this.$toast.success('Đã cập nhật thứ tự lịch trình!');
+          } catch (err) {
+            this.$toast.error('Lỗi khi lưu lịch trình');
           }
         }
       });
