@@ -28,23 +28,31 @@
                 <th>Tên</th>
                 <th>Email</th>
                 <th>Số điện thoại</th>
+                <th class="text-center">Trạng thái</th>
                 <th class="text-center" style="width: 150px">Thao tác</th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="isLoading">
-                <td colspan="5" class="empty-state">
+                <td colspan="6" class="empty-state">
                   <i class="bi bi-arrow-repeat spin"></i>
                   <p>Đang tải dữ liệu người dùng...</p>
                 </td>
               </tr>
 
-              <tr v-for="(item, index) in filteredUsers" :key="item.id" class="table-row">
-                <td class="text-center">{{ index + 1 }}</td>
+              <tr v-for="(item, index) in paginatedUsers" :key="item.id" class="table-row">
+                <td class="text-center">{{ (currentPage - 1) * itemsPerPage + index + 1 }}</td>
                 <td>
                   <div class="user-cell">
                     <div class="avatar-wrapper mini-avatar">
-                      <img v-if="item.anh_dai_dien" :src="resolveAvatarUrl(item.anh_dai_dien)" :alt="item.ten" class="avatar-image">
+                      <template v-if="item.anh_dai_dien && !brokenAvatars[item.id]">
+                        <img
+                          :src="resolveAvatarUrl(item.anh_dai_dien)"
+                          :alt="item.ten"
+                          class="avatar-image"
+                          @error="brokenAvatars[item.id] = true"
+                        >
+                      </template>
                       <span v-else class="avatar-fallback">
                         {{ getInitials(item.ten) }}
                       </span>
@@ -61,6 +69,21 @@
                   <span class="info-text">{{ item.so_dien_thoai || 'Chưa cập nhật' }}</span>
                 </td>
                 <td class="text-center">
+                  <span class="status-badge" :class="item.is_active == 1 ? 'approved' : 'pending'">
+                    <span class="status-dot"></span>
+                    {{ item.is_active == 1 ? 'Hoạt động' : 'Bị khóa' }}
+                  </span>
+                </td>
+                <td class="text-center">
+                  <button
+                    class="btn btn-sm me-2"
+                    :class="item.is_active == 1 ? 'btn-outline-warning' : 'btn-outline-success'"
+                    type="button"
+                    :title="item.is_active == 1 ? 'Khóa' : 'Mở khóa'"
+                    @click="moModalStatus(item)"
+                  >
+                    <i class="bi" :class="item.is_active == 1 ? 'bi-lock' : 'bi-unlock'"></i>
+                  </button>
                   <button
                     class="btn btn-sm btn-outline-primary me-2"
                     type="button"
@@ -76,13 +99,24 @@
               </tr>
 
               <tr v-if="!isLoading && !filteredUsers.length">
-                <td colspan="5" class="empty-state">
+                <td colspan="6" class="empty-state">
                   <i class="bi bi-inboxes"></i>
                   <p>Không tìm thấy người dùng phù hợp</p>
                 </td>
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <!-- Pagination -->
+        <div v-if="totalPages > 1" class="dg-pagination">
+          <button :disabled="currentPage <= 1" @click="goPage(currentPage - 1)">
+            <i class="bi bi-chevron-left"></i>
+          </button>
+          <span>Trang {{ currentPage }} / {{ totalPages }}</span>
+          <button :disabled="currentPage >= totalPages" @click="goPage(currentPage + 1)">
+            <i class="bi bi-chevron-right"></i>
+          </button>
         </div>
       </div>
     </div>
@@ -165,18 +199,30 @@
                 </div>
 
                 <div class="col-12">
-                  <label class="form-label modal-label" for="addAvatar">Avatar</label>
-                  <div class="input-group modal-input-group">
-                    <span class="input-group-text"><i class="bi bi-image"></i></span>
-                    <input
-                      v-model="create_nguoi_dung.anh_dai_dien"
-                      type="text"
-                      class="form-control"
-                      :class="{ 'is-invalid': formErrors.anh_dai_dien }"
-                      id="addAvatar"
-                    >
+                  <label class="form-label modal-label">Ảnh đại diện</label>
+                  <div class="avatar-upload-zone" :class="{ 'has-error': formErrors.anh_dai_dien }" @click="$refs.addAvatarInput.click()">
+                    <div v-if="create_avatar_preview" class="avatar-upload-preview">
+                      <img :src="create_avatar_preview" alt="Preview">
+                      <div class="avatar-upload-overlay">
+                        <i class="bi bi-camera-fill"></i>
+                        <span>Thay đổi ảnh</span>
+                      </div>
+                    </div>
+                    <div v-else class="avatar-upload-placeholder">
+                      <i class="bi bi-cloud-upload fs-3"></i>
+                      <p class="mb-1 fw-500">Chọn ảnh đại diện</p>
+                      <p class="text-muted small mb-0">PNG, JPG, GIF (Max 2MB)</p>
+                    </div>
                   </div>
-                  <div v-if="formErrors.anh_dai_dien" class="invalid-feedback d-block">{{ formErrors.anh_dai_dien }}</div>
+                  <input
+                    ref="addAvatarInput"
+                    type="file"
+                    accept="image/*"
+                    class="d-none"
+                    id="addAvatar"
+                    @change="handleCreateAvatar"
+                  >
+                  <div v-if="formErrors.anh_dai_dien" class="text-danger small mt-1">{{ formErrors.anh_dai_dien }}</div>
                 </div>
               </div>
 
@@ -272,18 +318,30 @@
                 </div>
 
                 <div class="col-12">
-                  <label class="form-label modal-label" for="editAvatar">Avatar</label>
-                  <div class="input-group modal-input-group">
-                    <span class="input-group-text"><i class="bi bi-image"></i></span>
-                    <input
-                      v-model="edit_nguoi_dung.anh_dai_dien"
-                      type="text"
-                      class="form-control"
-                      :class="{ 'is-invalid': editErrors.anh_dai_dien }"
-                      id="editAvatar"
-                    >
+                  <label class="form-label modal-label">Ảnh đại diện</label>
+                  <div class="avatar-upload-zone" :class="{ 'has-error': editErrors.anh_dai_dien }" @click="$refs.editAvatarInput.click()">
+                    <div v-if="edit_avatar_preview" class="avatar-upload-preview">
+                      <img :src="edit_avatar_preview" alt="Preview">
+                      <div class="avatar-upload-overlay">
+                        <i class="bi bi-camera-fill"></i>
+                        <span>Thay đổi ảnh</span>
+                      </div>
+                    </div>
+                    <div v-else class="avatar-upload-placeholder">
+                      <i class="bi bi-cloud-upload fs-3"></i>
+                      <p class="mb-1 fw-500">Chọn ảnh đại diện</p>
+                      <p class="text-muted small mb-0">PNG, JPG, GIF (Max 2MB)</p>
+                    </div>
                   </div>
-                  <div v-if="editErrors.anh_dai_dien" class="invalid-feedback d-block">{{ editErrors.anh_dai_dien }}</div>
+                  <input
+                    ref="editAvatarInput"
+                    type="file"
+                    accept="image/*"
+                    class="d-none"
+                    id="editAvatar"
+                    @change="handleEditAvatar"
+                  >
+                  <div v-if="editErrors.anh_dai_dien" class="text-danger small mt-1">{{ editErrors.anh_dai_dien }}</div>
                 </div>
               </div>
 
@@ -327,11 +385,41 @@
         </div>
       </div>
     </div>
+
+    <!-- Modal Status -->
+    <div class="modal fade" id="statusModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content rounded-4 user-modal">
+          <div class="modal-header modal-header-primary" :class="toggle_nguoi_dung.is_active == 1 ? 'modal-header-warning' : 'modal-header-success'">
+            <div>
+              <h5 class="modal-title">{{ toggle_nguoi_dung.is_active == 1 ? 'Khóa người dùng' : 'Mở khóa người dùng' }}</h5>
+            </div>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+
+          <div class="modal-body p-4">
+            <div class="delete-modal-icon" :style="{ background: toggle_nguoi_dung.is_active == 1 ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(252, 211, 77, 0.24))' : 'linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(52, 211, 153, 0.24))', color: toggle_nguoi_dung.is_active == 1 ? '#d97706' : '#059669', boxShadow: toggle_nguoi_dung.is_active == 1 ? 'inset 0 0 0 1px rgba(245, 158, 11, 0.08)' : 'inset 0 0 0 1px rgba(16, 185, 129, 0.08)' }">
+              <i class="bi" :class="toggle_nguoi_dung.is_active == 1 ? 'bi-lock-fill' : 'bi-unlock-fill'"></i>
+            </div>
+            <p class="delete-modal-text mb-0">
+              Bạn có chắc muốn {{ toggle_nguoi_dung.is_active == 1 ? 'khóa' : 'mở khóa' }} người dùng <strong>{{ toggle_nguoi_dung.ten || 'này' }}</strong> không?
+            </p>
+          </div>
+
+          <div class="modal-footer border-0 px-4 pb-4 pt-0">
+            <button type="button" class="btn btn-outline-secondary modal-btn" data-bs-dismiss="modal">Đóng</button>
+            <button type="button" class="btn modal-btn text-white" :class="toggle_nguoi_dung.is_active == 1 ? 'btn-warning' : 'btn-success'" :disabled="isToggling" @click="xacNhanToggleStatus">
+              <span v-if="isToggling" class="spinner-border spinner-border-sm me-2"></span>Xác nhận
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
-import axios from 'axios';
+import api from '../../services/api.js';
 import { Modal } from 'bootstrap';
 
 export default {
@@ -341,11 +429,17 @@ export default {
       search: '',
       list_users: [],
       isLoading: false,
+      currentPage: 1,
+      itemsPerPage: 10,
       isSubmitting: false,
       isUpdating: false,
       isDeleting: false,
+      isToggling: false,
+      brokenAvatars: {},
       formErrors: {},
       editErrors: {},
+      create_avatar_preview: null,
+      edit_avatar_preview: null,
       create_nguoi_dung: {
         ten: '',
         email: '',
@@ -366,7 +460,17 @@ export default {
         ten: '',
         email: '',
       },
+      toggle_nguoi_dung: {
+        id: null,
+        ten: '',
+        is_active: null,
+      },
     };
+  },
+  watch: {
+    search() {
+      this.currentPage = 1;
+    }
   },
   computed: {
     filteredUsers() {
@@ -381,11 +485,57 @@ export default {
           .some((value) => String(value).toLowerCase().includes(keyword));
       });
     },
+    totalPages() {
+      return Math.ceil(this.filteredUsers.length / this.itemsPerPage) || 1;
+    },
+    paginatedUsers() {
+      const start = (this.currentPage - 1) * this.itemsPerPage;
+      return this.filteredUsers.slice(start, start + this.itemsPerPage);
+    }
   },
   mounted() {
     this.layDataUser();
   },
   methods: {
+    goPage(page) {
+      if (page >= 1 && page <= this.totalPages) {
+        this.currentPage = page;
+      }
+    },
+    moModalStatus(item) {
+      this.toggle_nguoi_dung = {
+        id: item.id,
+        ten: item.ten || '',
+        is_active: item.is_active,
+      };
+      const modalElement = document.getElementById('statusModal');
+      const modalInstance = Modal.getOrCreateInstance(modalElement);
+      modalInstance?.show();
+    },
+    xacNhanToggleStatus() {
+      if (!this.toggle_nguoi_dung.id) return;
+      this.isToggling = true;
+      api.post(`/admin/nguoi-dungs/${this.toggle_nguoi_dung.id}/toggle-status`)
+        .then(res => {
+          this.$toast?.success(res.data?.message || 'Cập nhật trạng thái thành công');
+          
+          // Find in list_users to update locally
+          const userIndex = this.list_users.findIndex(u => u.id === this.toggle_nguoi_dung.id);
+          if (userIndex !== -1) {
+            this.list_users[userIndex].is_active = this.toggle_nguoi_dung.is_active == 1 ? 0 : 1;
+          }
+          
+          const modalElement = document.getElementById('statusModal');
+          const modalInstance = Modal.getInstance(modalElement);
+          modalInstance?.hide();
+        })
+        .catch(err => {
+          this.$toast?.error(err.response?.data?.message || 'Có lỗi xảy ra');
+        })
+        .finally(() => {
+          this.isToggling = false;
+        });
+    },
     resetCreateForm() {
       this.formErrors = {};
       this.create_nguoi_dung = {
@@ -395,6 +545,9 @@ export default {
         so_dien_thoai: '',
         anh_dai_dien: '',
       };
+      this.create_avatar_preview = null;
+      const fileInput = document.getElementById('addAvatar');
+      if (fileInput) fileInput.value = '';
     },
     resetEditForm() {
       this.editErrors = {};
@@ -406,6 +559,9 @@ export default {
         so_dien_thoai: '',
         anh_dai_dien: '',
       };
+      this.edit_avatar_preview = null;
+      const fileInput = document.getElementById('editAvatar');
+      if (fileInput) fileInput.value = '';
     },
     resetDeleteForm() {
       this.delete_nguoi_dung = {
@@ -416,11 +572,12 @@ export default {
     },
     layDataUser() {
       this.isLoading = true;
-      axios
-        .get('http://127.0.0.1:8000/api/admin/nguoi-dungs/get-data')
+      api
+        .get('/admin/nguoi-dungs/get-data')
         .then((res) => {
           if (res.data && res.data.data) {
             this.list_users = res.data.data;
+            this.brokenAvatars = {};
           } else {
             this.list_users = [];
           }
@@ -447,7 +604,7 @@ export default {
         return path;
       }
       const cleanPath = path.startsWith('/') ? path : `/${path}`;
-      return `http://127.0.0.1:8000${cleanPath}`;
+      return `${(import.meta.env.VITE_BACKEND_URL || '').replace(/\/+$/, '')}${cleanPath}`;
     },
     moModalSua(item) {
       this.resetEditForm();
@@ -457,8 +614,9 @@ export default {
         email: item.email || '',
         mat_khau: '',
         so_dien_thoai: item.so_dien_thoai || '',
-        anh_dai_dien: item.anh_dai_dien || '',
+        anh_dai_dien: '',
       };
+      this.edit_avatar_preview = item.anh_dai_dien ? this.resolveAvatarUrl(item.anh_dai_dien) : null;
 
       const modalElement = document.getElementById('editModal');
       const modalInstance = Modal.getOrCreateInstance(modalElement);
@@ -476,20 +634,41 @@ export default {
       const modalInstance = Modal.getOrCreateInstance(modalElement);
       modalInstance?.show();
     },
+    handleCreateAvatar(event) {
+      const file = event.target.files[0];
+      if (file) {
+        this.create_nguoi_dung.anh_dai_dien = file;
+        this.create_avatar_preview = URL.createObjectURL(file);
+      } else {
+        this.create_nguoi_dung.anh_dai_dien = '';
+        this.create_avatar_preview = null;
+      }
+    },
+    handleEditAvatar(event) {
+      const file = event.target.files[0];
+      if (file) {
+        this.edit_nguoi_dung.anh_dai_dien = file;
+        this.edit_avatar_preview = URL.createObjectURL(file);
+      } else {
+        this.edit_nguoi_dung.anh_dai_dien = '';
+        this.edit_avatar_preview = null;
+      }
+    },
     themNguoiDung() {
       this.formErrors = {};
 
-      const payload = {
-        ho_va_ten: this.create_nguoi_dung.ten,
-        email: this.create_nguoi_dung.email,
-        password: this.create_nguoi_dung.mat_khau,
-        password_confirmation: this.create_nguoi_dung.mat_khau,
-        so_dien_thoai: this.create_nguoi_dung.so_dien_thoai,
-        anh_dai_dien: this.create_nguoi_dung.anh_dai_dien || null,
-      };
+      const formData = new FormData();
+      formData.append('ho_va_ten', this.create_nguoi_dung.ten || '');
+      formData.append('email', this.create_nguoi_dung.email || '');
+      formData.append('password', this.create_nguoi_dung.mat_khau || '');
+      formData.append('password_confirmation', this.create_nguoi_dung.mat_khau || '');
+      formData.append('so_dien_thoai', this.create_nguoi_dung.so_dien_thoai || '');
+      if (this.create_nguoi_dung.anh_dai_dien) {
+        formData.append('anh_dai_dien', this.create_nguoi_dung.anh_dai_dien);
+      }
 
       this.isSubmitting = true;
-      axios.post('http://127.0.0.1:8000/api/admin/nguoi-dungs/create', payload)
+      api.post('/admin/nguoi-dungs/create', formData)
         .then((res) => {
           this.$toast?.success(res.data?.message || 'Thêm tài khoản người dùng thành công');
           this.layDataUser();
@@ -524,23 +703,45 @@ export default {
     capNhatNguoiDung() {
       this.editErrors = {};
 
-      const payload = {
-        ho_va_ten: this.edit_nguoi_dung.ten,
-        email: this.edit_nguoi_dung.email,
-        so_dien_thoai: this.edit_nguoi_dung.so_dien_thoai,
-        anh_dai_dien: this.edit_nguoi_dung.anh_dai_dien || null,
-      };
-
+      const formData = new FormData();
+      formData.append('ho_va_ten', this.edit_nguoi_dung.ten || '');
+      formData.append('email', this.edit_nguoi_dung.email || '');
+      formData.append('so_dien_thoai', this.edit_nguoi_dung.so_dien_thoai || '');
+      if (this.edit_nguoi_dung.anh_dai_dien instanceof File) {
+        formData.append('anh_dai_dien', this.edit_nguoi_dung.anh_dai_dien);
+      }
       if (this.edit_nguoi_dung.mat_khau) {
-        payload.password = this.edit_nguoi_dung.mat_khau;
-        payload.password_confirmation = this.edit_nguoi_dung.mat_khau;
+        formData.append('password', this.edit_nguoi_dung.mat_khau);
+        formData.append('password_confirmation', this.edit_nguoi_dung.mat_khau);
       }
 
       this.isUpdating = true;
-      axios.post(`http://127.0.0.1:8000/api/admin/nguoi-dungs/${this.edit_nguoi_dung.id}`, payload)
+      api.post(`/admin/nguoi-dungs/${this.edit_nguoi_dung.id}`, formData)
         .then((res) => {
           this.$toast?.success(res.data?.message || 'Cập nhật người dùng thành công');
-          this.layDataUser();
+
+          // Cập nhật trực tiếp item trong list để Vue phát hiện thay đổi
+          const updated = res.data?.data;
+          if (updated) {
+            const idx = this.list_users.findIndex(u => u.id === this.edit_nguoi_dung.id);
+            if (idx !== -1) {
+              // Xóa broken avatar tracking để ảnh mới được hiển thị
+              delete this.brokenAvatars[this.edit_nguoi_dung.id];
+
+              const newItem = {
+                ...this.list_users[idx],
+                ten: updated.ho_va_ten || updated.ten || this.edit_nguoi_dung.ten,
+                so_dien_thoai: updated.so_dien_thoai || this.edit_nguoi_dung.so_dien_thoai,
+                anh_dai_dien: updated.anh_dai_dien !== undefined
+                  ? updated.anh_dai_dien
+                  : this.list_users[idx].anh_dai_dien,
+              };
+              this.list_users.splice(idx, 1, newItem);
+            }
+          } else {
+            this.layDataUser();
+          }
+
           this.resetEditForm();
           const modalElement = document.getElementById('editModal');
           const modalInstance = Modal.getInstance(modalElement);
@@ -570,7 +771,7 @@ export default {
       if (!this.delete_nguoi_dung.id) return;
 
       this.isDeleting = true;
-      axios.delete(`http://127.0.0.1:8000/api/admin/nguoi-dungs/${this.delete_nguoi_dung.id}`)
+      api.delete(`/admin/nguoi-dungs/${this.delete_nguoi_dung.id}`)
         .then((res) => {
           this.$toast?.success(res.data?.message || 'Xóa người dùng thành công');
           this.layDataUser();
@@ -731,6 +932,9 @@ export default {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
+  font-size: 0;
+  color: transparent;
 }
 
 .avatar-fallback {
@@ -771,6 +975,81 @@ export default {
   margin: 0;
 }
 
+/* === Avatar Upload Zone === */
+.avatar-upload-zone {
+  width: 100%;
+  border: 2px dashed #dbe4f0;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  overflow: hidden;
+  background: #f8fafc;
+  min-height: 130px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.avatar-upload-zone:hover {
+  border-color: #a5b4fc;
+  background: #f0f4ff;
+}
+
+.avatar-upload-zone.has-error {
+  border-color: #fca5a5;
+  background: #fff5f5;
+}
+
+.avatar-upload-placeholder {
+  text-align: center;
+  padding: 20px;
+  color: #64748b;
+  pointer-events: none;
+}
+
+.avatar-upload-placeholder i {
+  color: #a5b4fc;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.avatar-upload-preview {
+  width: 100%;
+  height: 130px;
+  position: relative;
+}
+
+.avatar-upload-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.avatar-upload-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #fff;
+  font-size: 0.85rem;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.avatar-upload-preview:hover .avatar-upload-overlay {
+  opacity: 1;
+}
+
+.avatar-upload-overlay i {
+  font-size: 1.4rem;
+}
+
 .user-modal {
   border: none;
   overflow: hidden;
@@ -786,6 +1065,14 @@ export default {
 
 .modal-header-danger {
   background: linear-gradient(135deg, #dc2626, #f97316);
+}
+
+.modal-header-warning {
+  background: linear-gradient(135deg, #f59e0b, #fbbf24);
+}
+
+.modal-header-success {
+  background: linear-gradient(135deg, #10b981, #34d399);
 }
 
 .modal-title {
@@ -904,5 +1191,48 @@ export default {
   .delete-modal-text {
     font-size: 0.95rem;
   }
+}
+
+/* Pagination */
+.dg-pagination { display: flex; align-items: center; justify-content: center; gap: 1rem; padding: 1rem; border-top: 1px solid #f0f4f8; }
+.dg-pagination button { background: #fff; border: 1.5px solid #dbe3f0; border-radius: .6rem; padding: .4rem .8rem; cursor: pointer; font-size: .9rem; transition: all .2s; }
+.dg-pagination button:hover:not(:disabled) { border-color: #10b981; color: #10b981; }
+.dg-pagination button:disabled { opacity: .4; cursor: not-allowed; }
+.dg-pagination span { font-size: .88rem; font-weight: 600; color: #627289; }
+
+/* Status Badge */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.status-badge.pending {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.status-badge.pending .status-dot {
+  background: #dc2626;
+}
+
+.status-badge.approved {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.status-badge.approved .status-dot {
+  background: #10b981;
 }
 </style>

@@ -247,7 +247,7 @@
 import { ref, onMounted, computed, nextTick, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { useNhomChatSocket } from '../../composables/useNhomChatSocket';
-import { CLIENT_API_BASE_URL } from '../../services/clientApi';
+import api from '../../services/api';
 import { getClientAccessToken } from '../../utils/clientAuth';
 import { useToast } from 'vue-toast-notification';
 
@@ -275,13 +275,8 @@ const confirmingSet = ref(false);
 // Fetch group info
 const fetchGroupInfo = async () => {
   try {
-    const response = await fetch(`${CLIENT_API_BASE_URL}/client/nhom-du-lich/${groupId}`, {
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    const data = await response.json();
+    const response = await api.get(`/client/nhom-du-lich/${groupId}`);
+    const data = response.data;
     if (data.status) {
       group.value = data.data;
     } else {
@@ -295,13 +290,8 @@ const fetchGroupInfo = async () => {
 // Fetch members
 const fetchMembers = async () => {
   try {
-    const response = await fetch(`${CLIENT_API_BASE_URL}/client/nhom-du-lich/members/${groupId}`, {
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-    });
-    const data = await response.json();
+    const response = await api.get(`/client/nhom-du-lich/members/${groupId}`);
+    const data = response.data;
     if (data.status) {
       members.value = data.data || [];
     }
@@ -313,13 +303,10 @@ const fetchMembers = async () => {
 // Load initial messages
 const loadInitialMessages = async () => {
   try {
-    const response = await fetch(`${CLIENT_API_BASE_URL}/nhom-chats?id_nhom_du_lich=${groupId}`, {
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
+    const response = await api.get('/nhom-chats', {
+      params: { id_nhom_du_lich: groupId }
     });
-    const data = await response.json();
+    const data = response.data;
     if (data.status) {
       return data.data || [];
     }
@@ -373,11 +360,8 @@ const tripStatuses = ref({});
 const finalizeTrip = async (tripId) => {
     if (!tripId) return;
     try {
-        const res = await fetch(`${CLIENT_API_BASE_URL}/client/chuyen-di/${tripId}/chot-lich-trinh`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}` }
-        });
-        const data = await res.json();
+        const res = await api.post(`/client/chuyen-di/${tripId}/chot-lich-trinh`);
+        const data = res.data;
         if (data.status) {
             tripStatuses.value[tripId] = 2; // mark as finalized
             showRatingModal.value = true; // Show rating modal
@@ -422,16 +406,9 @@ const submitRating = async () => {
   if (!selectedRating.value) return;
   submittingRating.value = true;
   try {
-    await fetch(`${CLIENT_API_BASE_URL}/client/danh-gia-he-thong`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        muc_do_hai_long: selectedRating.value,
-        noi_dung: ratingFeedback.value,
-      }),
+    await api.post('/client/danh-gia-he-thong', {
+      muc_do_hai_long: selectedRating.value,
+      noi_dung: ratingFeedback.value,
     }).catch(() => { });
   } finally {
     submittingRating.value = false;
@@ -453,15 +430,10 @@ const setGroupItinerary = (tripId) => {
 const confirmSetItinerary = async () => {
     confirmingSet.value = true;
     try {
-        const res = await fetch(`${CLIENT_API_BASE_URL}/client/nhom-du-lich/${groupId}/set-lich-trinh`, {
-            method: 'POST',
-            headers: { 
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ id_chuyen_di: confirmModalTripId.value })
+        const res = await api.post(`/client/nhom-du-lich/${groupId}/set-lich-trinh`, {
+          id_chuyen_di: confirmModalTripId.value
         });
-        const data = await res.json();
+        const data = res.data;
         showConfirmModal.value = false;
         if (data.status) {
             group.value.id_chuyen_di = confirmModalTripId.value;
@@ -492,9 +464,8 @@ watch(processedMessages, (newMsgs) => {
             const data = extractItineraryData(msg.message);
             if (data.id && tripStatuses.value[data.id] === undefined) {
                 tripStatuses.value[data.id] = 1; // Default
-                fetch(`${CLIENT_API_BASE_URL}/client/chuyen-di/${data.id}`, {
-                    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' }
-                }).then(r => r.json()).then(d => {
+                api.get(`/client/chuyen-di/${data.id}`).then((response) => {
+                    const d = response.data;
                     if (d.status && d.data) {
                         tripStatuses.value[data.id] = d.data.trang_thai;
                     }
@@ -515,7 +486,7 @@ const getAvatarUrl = (msg) => {
     return path;
   }
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  return `http://127.0.0.1:8000${cleanPath}`;
+  return `${(import.meta.env.VITE_BACKEND_URL || '').replace(/\/+$/, '')}${cleanPath}`;
 };
 
 const scrollToBottom = async () => {

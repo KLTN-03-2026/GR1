@@ -167,7 +167,7 @@
 </template>
 
 <script>
-import axios from 'axios';
+import api from '../../services/api.js';
 import { Modal } from 'bootstrap';
 
 export default {
@@ -220,7 +220,7 @@ export default {
     async fetchCategories() {
       try {
         this.isLoading = true;
-        const res = await axios.get('http://127.0.0.1:8000/api/danh-mucs', this.authConfig());
+        const res = await api.get('/danh-mucs', this.authConfig());
         if (res.data && res.data.data) {
           this.categories = res.data.data.map(item => ({
             id: item.id,
@@ -281,9 +281,9 @@ export default {
         };
         
         if (this.isEditing) {
-          await axios.put(`http://127.0.0.1:8000/api/danh-mucs/${this.formData.id}`, payload, this.authConfig());
+          await api.put(`/danh-mucs/${this.formData.id}`, payload, this.authConfig());
         } else {
-          await axios.post('http://127.0.0.1:8000/api/danh-mucs', payload, this.authConfig());
+          await api.post('/danh-mucs', payload, this.authConfig());
         }
         
         await this.fetchCategories();
@@ -299,7 +299,7 @@ export default {
     async confirmDelete(category) {
       if(confirm('Bạn có chắc chắn muốn xóa danh mục: ' + category.name + '? Mọi địa điểm sẽ bị gỡ khỏi danh mục này!')) {
         try {
-          await axios.delete(`http://127.0.0.1:8000/api/danh-mucs/${category.id}`, this.authConfig());
+          await api.delete(`/danh-mucs/${category.id}`, this.authConfig());
           await this.fetchCategories();
           this.$toast ? this.$toast.success('Xóa danh mục thành công!') : alert('Xóa danh mục thành công!');
         } catch (error) {

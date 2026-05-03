@@ -437,10 +437,10 @@
 </template>
 
 <script>
-import axios from 'axios'
+import api from '../../services/api.js';
 
-const USERS_API_URL = 'http://127.0.0.1:8000/api/admin/nguoi-dungs/get-data'
-const ADMINS_API_URL = 'http://127.0.0.1:8000/api/admin/danh-sach-nhan-vien'
+const USERS_API_URL = '/admin/nguoi-dungs/get-data'
+const ADMINS_API_URL = '/admin/danh-sach-nhan-vien'
 
 export default {
   name: 'Dashboard',
@@ -642,7 +642,7 @@ export default {
       this.errorMessage = ''
 
       try {
-        const statsRes = await axios.get(`http://127.0.0.1:8000/api/admin/statistics?time_filter=${this.timeFilter}`, this.authHeader())
+        const statsRes = await api.get(`/admin/statistics?time_filter=${this.timeFilter}`, this.authHeader())
         this.stats = statsRes.data?.data
         
         // Update Chart Labels dynamically
@@ -714,9 +714,9 @@ export default {
           };
         }
 
-        const promises = [axios.get(USERS_API_URL, this.authHeader())];
+        const promises = [api.get(USERS_API_URL, this.authHeader())];
         if (this.isSuperAdmin) {
-          promises.push(axios.get(ADMINS_API_URL, this.authHeader()));
+          promises.push(api.get(ADMINS_API_URL, this.authHeader()));
         }
 
         const responses = await Promise.all(promises);

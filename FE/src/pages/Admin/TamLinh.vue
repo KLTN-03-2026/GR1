@@ -1,7 +1,7 @@
 <template>
   <LocationManager
     pageTitle="Quản lý Tâm linh"
-    fetchUrl="http://127.0.0.1:8000/api/dia-diems/tam-linh"
+    fetchUrl="/dia-diems/tam-linh"
     categoryId="4"
     categoryDefaultType="Chùa"
   />

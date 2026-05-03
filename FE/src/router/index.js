@@ -163,6 +163,8 @@ const routes = [
     component: () => import("../pages/Admin/DanhMuc.vue"),
     meta: { layout: "default" },
   },
+
+
   {
     path: "/admin/quan-ly-danh-gia-phan-hoi",
     component: () => import("../pages/Admin/QuanLyDanhGia.vue"),

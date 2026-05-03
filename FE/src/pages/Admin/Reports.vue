@@ -232,7 +232,7 @@
 </template>
 
 <script>
-import axios from 'axios'
+import api from '../../services/api.js';
 
 export default {
   name: 'Reports',
@@ -339,12 +339,12 @@ export default {
         const token = localStorage.getItem('key_admin')
         const headers = token ? { Authorization: `Bearer ${token}` } : {}
         
-        let url = 'http://127.0.0.1:8000/api/admin/statistics?time_filter=year'
+        let url = '/admin/statistics?time_filter=year'
         if (this.startDate && this.endDate) {
           url += `&start_date=${this.startDate}&end_date=${this.endDate}`
         }
         
-        const statsRes = await axios.get(url, { headers })
+        const statsRes = await api.get(url, { headers })
         const data = statsRes.data?.data
         
         if (data) {

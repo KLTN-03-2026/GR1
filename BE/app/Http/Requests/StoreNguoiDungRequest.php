@@ -33,7 +33,7 @@ class StoreNguoiDungRequest extends FormRequest
             'so_dien_thoai' => ['required', 'regex:/^(0|\+84)\d{9}$/'],
             'password' => 'required|string|min:6|confirmed',
             'password_confirmation' => 'required|string|min:6',
-            'anh_dai_dien' => 'nullable|string',
+            'anh_dai_dien' => 'nullable',
         ];
     }
 

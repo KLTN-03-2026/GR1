@@ -1,4 +1,4 @@
-import clientApi, { getApiErrorMessage } from './clientApi';
+import api, { getApiErrorMessage } from './api';
 
 /**
  * @typedef {Object} ApiStatusResponse
@@ -23,7 +23,7 @@ import clientApi, { getApiErrorMessage } from './clientApi';
 
 export async function inviteMember(idNhom, email) {
   try {
-    const response = await clientApi.post('/client/nhom-du-lich/invite', {
+    const response = await api.post('/client/nhom-du-lich/invite', {
       id_nhom: idNhom,
       email,
     });
@@ -36,7 +36,7 @@ export async function inviteMember(idNhom, email) {
 
 export async function getInvites() {
   try {
-    const response = await clientApi.get('/client/nhom-du-lich/get-invites');
+    const response = await api.get('/client/nhom-du-lich/get-invites');
     return response.data;
   } catch (error) {
     throw new Error(getApiErrorMessage(error, 'Không thể tải danh sách lời mời.'));
@@ -45,7 +45,7 @@ export async function getInvites() {
 
 export async function respondInvite(idThanhVien, chapNhan) {
   try {
-    const response = await clientApi.post('/client/nhom-du-lich/accept-invite', {
+    const response = await api.post('/client/nhom-du-lich/accept-invite', {
       id_thanh_vien: idThanhVien,
       chap_nhan: chapNhan,
     });

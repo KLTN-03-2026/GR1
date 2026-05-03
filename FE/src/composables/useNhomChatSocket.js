@@ -6,18 +6,16 @@ import { getClientAccessToken } from "../utils/clientAuth";
 
 window.Pusher = Pusher;
 
-const DEFAULT_BACKEND_URL = "http://localhost:8000";
 const EVENT_NAME = "nhom-chat.message.sent";
+
+const backendUrl = (import.meta.env.VITE_BACKEND_URL || "").replace(/\/+$/, "");
 
 const reverbConfig = {
   key: import.meta.env.VITE_REVERB_APP_KEY || "",
-  host: import.meta.env.VITE_REVERB_HOST || "127.0.0.1",
-  port: Number(import.meta.env.VITE_REVERB_PORT || 8080),
-  scheme: (import.meta.env.VITE_REVERB_SCHEME || "http").toLowerCase(),
-  backendUrl: (import.meta.env.VITE_BACKEND_URL || DEFAULT_BACKEND_URL).replace(
-    /\/+$/,
-    "",
-  ),
+  host: import.meta.env.VITE_REVERB_HOST || "",
+  port: Number(import.meta.env.VITE_REVERB_PORT || 443),
+  scheme: (import.meta.env.VITE_REVERB_SCHEME || "https").toLowerCase(),
+  backendUrl: backendUrl,
 };
 
 let echoInstance = null;

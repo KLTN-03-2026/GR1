@@ -144,8 +144,7 @@
 <script>
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-
-const BASE = 'http://localhost:8000/api';
+import api from '../../services/api';
 
 export default {
   name: 'LichTrinhCuaToi',
@@ -179,8 +178,8 @@ export default {
     async fetchData() {
       this.loading = true;
       try {
-        const res = await fetch(`${BASE}/client/chuyen-di/get-data`, {
-          headers: { Authorization: `Bearer ${this.token}` },
+        const res = await api.get('/client/chuyen-di/get-data', {
+          validateStatus: () => true,
         });
         if (res.status === 401) {
           // Token hết hạn hoặc không hợp lệ → xóa và yêu cầu đăng nhập lại
@@ -189,7 +188,7 @@ export default {
           this.chuyenDis = [];
           return;
         }
-        const json = await res.json();
+        const json = res.data;
         this.chuyenDis = json.data || [];
       } catch {
         this.chuyenDis = [];
@@ -202,11 +201,11 @@ export default {
       if(!this.token) return;
       try {
         const [joinedRes, ownedRes] = await Promise.all([
-          fetch(`${BASE}/client/nhom-du-lich/get-joined`, { headers: { Authorization: `Bearer ${this.token}` } }),
-          fetch(`${BASE}/client/nhom-du-lich/get-my-groups`, { headers: { Authorization: `Bearer ${this.token}` } })
+          api.get('/client/nhom-du-lich/get-joined'),
+          api.get('/client/nhom-du-lich/get-my-groups')
         ]);
-        const jData = await joinedRes.json();
-        const oData = await ownedRes.json();
+        const jData = joinedRes.data;
+        const oData = ownedRes.data;
         
         const groups = [];
         if (jData.status && jData.data) groups.push(...jData.data);
@@ -242,15 +241,7 @@ export default {
             message: JSON.stringify({ type: 'itinerary', id: this.tripToShare.id, title: this.tripToShare.ten_chuyen_di })
         };
 
-        const r = await fetch(`http://localhost:8000/api/nhom-chats`, {
-          method: 'POST', 
-          headers: { 
-            'Content-Type': 'application/json', 
-            Authorization: `Bearer ${this.token}` 
-          },
-          body: JSON.stringify(payload)
-        });
-        const res = await r.json();
+        const { data: res } = await api.post('/nhom-chats', payload);
         
         if (res.status) {
           this.$toast.success('Gửi lịch trình thành công!');
@@ -304,12 +295,10 @@ export default {
       if (!this.deleteTarget) return;
       this.deleting = true;
       try {
-        const res = await fetch(`${BASE}/client/chuyen-di/delete`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.token}` },
-          body: JSON.stringify({ id: this.deleteTarget.id }),
+        const res = await api.post('/client/chuyen-di/delete', {
+          id: this.deleteTarget.id
         });
-        const json = await res.json();
+        const json = res.data;
         if (json.status) {
           this.chuyenDis = this.chuyenDis.filter(t => t.id !== this.deleteTarget.id);
           this.deleteTarget = null;

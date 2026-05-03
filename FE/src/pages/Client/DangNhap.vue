@@ -123,11 +123,11 @@
 </template>
 
 <script>
-import axios from 'axios';
+import api from '../../services/api.js';
 import { saveClientRedirectPath, saveClientSession } from '../../utils/clientAuth';
 
-const GOOGLE_AUTH_URL = 'http://127.0.0.1:8000/auth/google';
-const LOGIN_API_URL = 'http://127.0.0.1:8000/api/client/dang-nhap';
+const GOOGLE_AUTH_URL = `${(import.meta.env.VITE_BACKEND_URL || '').replace(/\/+$/, '')}/auth/google`;
+const LOGIN_API_URL = '/client/dang-nhap';
 
 export default {
     data() {
@@ -181,7 +181,7 @@ export default {
             if (!this.validateClient()) return;
 
             this.loading = true;
-            axios.post(LOGIN_API_URL, this.thong_tin_dang_nhap)
+            api.post(LOGIN_API_URL, this.thong_tin_dang_nhap)
                 .then((res) => {
                     if (res.data.status) {
                         this.luuTrangCanQuayLai();
