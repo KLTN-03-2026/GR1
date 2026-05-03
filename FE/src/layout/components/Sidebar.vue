@@ -20,28 +20,28 @@
         </li>
 
         <!-- Users -->
-        <li class="nav-item" v-if="hasPermission('user_manage')">
+        <li class="nav-item" v-if="hasPermission('user_view')">
           <router-link to="/admin/users" class="nav-link" :class="{ active: isActive('/users') }">
             <i class="bi bi-people"></i>
             <span v-if="!isCollapsed" class="nav-label">Quản lý người dùng</span>
           </router-link>
         </li>
 
-        <!-- Orders with submenu (Chỉ Super Admin mới xem được) -->
-        <li class="nav-item" v-if="isSuperAdmin">
+        <!-- Orders with submenu -->
+        <li class="nav-item" v-if="isSuperAdmin || hasPermission('admin_view')">
           <a class="nav-link" @click="toggleSubmenu" :class="{ active: showSubmenu }">
             <i class="bi bi-person-badge"></i>
             <span v-if="!isCollapsed" class="nav-label">Quản lý nhân viên</span>
             <i v-if="!isCollapsed" class="bi bi-chevron-down ms-auto chevron"></i>
           </a>
           <ul v-if="showSubmenu && !isCollapsed" class="submenu">
-            <li>
+            <li v-if="isSuperAdmin">
               <router-link to="/admin/phan-quyen" class="submenu-link">
                 <i class="bi bi-shield-lock"></i>
                 <span>Phân quyền</span>
               </router-link>
             </li>
-            <li>
+            <li v-if="hasPermission('admin_view')">
               <router-link to="/admin/danh-sach-nhan-vien" class="submenu-link">
                 <i class="bi bi-people"></i>
                 <span>Danh sách nhân viên</span>
@@ -50,7 +50,7 @@
           </ul>
         </li>
         <!-- Danh mục -->
-        <li class="nav-item" v-if="hasPermission('category_manage')">
+        <li class="nav-item" v-if="hasPermission('category_view')">
           <router-link to="/admin/danh-muc" class="nav-link" :class="{ active: isActive('/admin/danh-muc') }">
             <i class="bi bi-folder2-open"></i>
             <span v-if="!isCollapsed" class="nav-label">Quản lý danh mục</span>
@@ -58,7 +58,7 @@
         </li>
 
         <!-- Categories with submenu -->
-        <li class="nav-item" v-if="hasPermission('place_amthuc_manage') || hasPermission('place_tamlinh_manage') || hasPermission('place_giaitri_manage') || hasPermission('place_checkin_manage')">
+        <li class="nav-item" v-if="hasPermission('place_amthuc_view') || hasPermission('place_tamlinh_view') || hasPermission('place_giaitri_view') || hasPermission('place_checkin_view')">
           <a
             class="nav-link"
             @click="toggleCategorySubmenu"
@@ -69,7 +69,7 @@
             <i v-if="!isCollapsed" class="bi bi-chevron-down ms-auto chevron"></i>
           </a>
           <ul v-if="showCategorySubmenu && !isCollapsed" class="submenu">
-            <li v-if="hasPermission('place_amthuc_manage')">
+            <li v-if="hasPermission('place_amthuc_view')">
               <router-link
                 :to="{ path: '/admin/am-thuc', query: { category: 'am-thuc' } }"
                 class="submenu-link"
@@ -79,7 +79,7 @@
                 <span>Ẩm thực</span>
               </router-link>
             </li>
-            <li v-if="hasPermission('place_tamlinh_manage')">
+            <li v-if="hasPermission('place_tamlinh_view')">
               <router-link
                 :to="{ path: '/admin/tam-linh', query: { category: 'tam-linh' } }"
                 class="submenu-link"
@@ -89,7 +89,7 @@
                 <span>Tâm linh</span>
               </router-link>
             </li>
-            <li v-if="hasPermission('place_giaitri_manage')">
+            <li v-if="hasPermission('place_giaitri_view')">
               <router-link
                 :to="{ path: '/admin/giai-tri', query: { category: 'giai-tri' } }"
                 class="submenu-link"
@@ -99,7 +99,7 @@
                 <span>Giải trí</span>
               </router-link>
             </li>
-            <li v-if="hasPermission('place_checkin_manage')">
+            <li v-if="hasPermission('place_checkin_view')">
               <router-link
                 :to="{ path: '/admin/check-in', query: { category: 'check-in' } }"
                 class="submenu-link"
@@ -115,7 +115,7 @@
 
 
         <!-- Quản lý đánh giá -->
-        <li class="nav-item" v-if="hasPermission('review_manage')">
+        <li class="nav-item" v-if="hasPermission('review_view')">
           <router-link to="/admin/quan-ly-danh-gia-phan-hoi" class="nav-link" :class="{ active: isActive('/admin/quan-ly-danh-gia-phan-hoi') }">
             <i class="bi bi-star-half"></i>
             <span v-if="!isCollapsed" class="nav-label">Quản lý đánh giá</span>

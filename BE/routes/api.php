@@ -106,20 +106,24 @@ Route::post('/admin/dang-nhap', [AdminController::class, 'dangNhap']);
 
 // Admins Quản Lý Nhân Viên Routes
 Route::prefix('admin')->middleware('auth:sanctum')->group(function () {
+    Route::get('/me', [AdminController::class, 'me']);
+    
     // Phân quyền: Cấm "Nhân viên" vào quản lý tài khoản Quản trị
-    Route::middleware('check_permission:admin_manage')->group(function () {
-        Route::get('/danh-sach-nhan-vien', [AdminController::class, 'getData']);
-        Route::post('/danh-sach-nhan-vien/them-nhan-vien', [AdminController::class, 'create']);
-        Route::get('/danh-sach-nhan-vien/{id}', [AdminController::class, 'show']);
-        Route::post('/danh-sach-nhan-vien/{id}', [AdminController::class, 'update']);
-        Route::delete('/danh-sach-nhan-vien/{id}', [AdminController::class, 'destroy']);
-        Route::post('/{id}', [AdminController::class, 'update']);
-        Route::delete('/{id}', [AdminController::class, 'destroy']);
-    });
+    Route::get('/danh-sach-nhan-vien', [AdminController::class, 'getData'])->middleware('check_permission:admin_view');
+    Route::post('/danh-sach-nhan-vien/them-nhan-vien', [AdminController::class, 'create'])->middleware('check_permission:admin_create');
+    Route::get('/danh-sach-nhan-vien/{id}', [AdminController::class, 'show'])->middleware('check_permission:admin_view');
+    Route::post('/danh-sach-nhan-vien/{id}', [AdminController::class, 'update'])->middleware('check_permission:admin_update');
+    Route::delete('/danh-sach-nhan-vien/{id}', [AdminController::class, 'destroy'])->middleware('check_permission:admin_delete');
+    Route::post('/{id}', [AdminController::class, 'update'])->middleware('check_permission:admin_update');
+    Route::delete('/{id}', [AdminController::class, 'destroy'])->middleware('check_permission:admin_delete');
 
-    // Quyền Quản lý người dùng
-    Route::middleware('check_permission:user_manage')->group(function () {
-        Route::get('/nguoi-dungs/get-data', [AdminController::class, 'getNguoiDung']);
+    // Quản lý người dùng
+    Route::prefix('nguoi-dungs')->group(function () {
+        Route::get('/get-data', [NguoiDungController::class, 'getData'])->middleware('check_permission:user_view');
+        Route::post('/create', [NguoiDungController::class, 'create'])->middleware('check_permission:user_create');
+        Route::post('/{nguoi_dung}/toggle-status', [NguoiDungController::class, 'toggleStatus'])->middleware('check_permission:user_status');
+        Route::post('/{nguoi_dung}', [NguoiDungController::class, 'update'])->middleware('check_permission:user_update');
+        Route::delete('/{nguoi_dung}', [NguoiDungController::class, 'destroy'])->middleware('check_permission:user_delete');
     });
 
     // Quyền Xem Báo cáo thống kê HOẶC Xem Dashboard
@@ -292,11 +296,4 @@ Route::prefix('lich-trinh-dia-diems')->group(function () {
 // Lấy danh sách địa điểm (kèm tọa độ) theo chuyến đi
 Route::get('/chuyen-di/{id}/dia-diems', [LichTrinhDiaDiemController::class, 'getDiaDiemByChuyenDi']);
 
-// Người dùng Routes
-Route::prefix('admin/nguoi-dungs')->group(function () {
-    Route::get('get-data/', [NguoiDungController::class, 'getData']);
-    Route::post('/create', [NguoiDungController::class, 'create']);
-    Route::post('/{nguoi_dung}/toggle-status', [NguoiDungController::class, 'toggleStatus']);
-    Route::post('/{nguoi_dung}', [NguoiDungController::class, 'update']);
-    Route::delete('/{nguoi_dung}', [NguoiDungController::class, 'destroy']);
-});
+// Người dùng Routes (Đã chuyển vào nhóm admin phía trên)

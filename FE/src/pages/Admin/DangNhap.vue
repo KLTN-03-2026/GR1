@@ -134,13 +134,13 @@ export default {
                             const perms = chucNangs.map(p => p.ma_chuc_nang);
 
                             if (perms.includes('dashboard_view')) targetRoute = '/admin/dashboard';
-                            else if (perms.includes('user_manage')) targetRoute = '/admin/users';
-                            else if (perms.includes('category_manage')) targetRoute = '/admin/danh-muc';
-                            else if (perms.includes('place_amthuc_manage')) targetRoute = '/admin/am-thuc';
-                            else if (perms.includes('place_tamlinh_manage')) targetRoute = '/admin/tam-linh';
-                            else if (perms.includes('place_giaitri_manage')) targetRoute = '/admin/giai-tri';
-                            else if (perms.includes('place_checkin_manage')) targetRoute = '/admin/check-in';
-                            else if (perms.includes('review_manage')) targetRoute = '/admin/quan-ly-danh-gia-phan-hoi';
+                            else if (perms.includes('user_view')) targetRoute = '/admin/users';
+                            else if (perms.includes('category_view')) targetRoute = '/admin/danh-muc';
+                            else if (perms.includes('place_amthuc_view')) targetRoute = '/admin/am-thuc';
+                            else if (perms.includes('place_tamlinh_view')) targetRoute = '/admin/tam-linh';
+                            else if (perms.includes('place_giaitri_view')) targetRoute = '/admin/giai-tri';
+                            else if (perms.includes('place_checkin_view')) targetRoute = '/admin/check-in';
+                            else if (perms.includes('review_view')) targetRoute = '/admin/quan-ly-danh-gia-phan-hoi';
                             else if (perms.includes('report_view')) targetRoute = '/admin/reports';
                             // Nếu không có quyền nào, cho ở lại hoặc sang dashboard để bị báo lỗi
                         }

@@ -26,6 +26,7 @@
               Làm mới
             </button>
             <button
+              v-if="hasPermission('admin_create')"
               class="btn btn-primary action-btn"
               type="button"
               data-bs-toggle="modal"
@@ -103,6 +104,7 @@
                 </td>
                 <td class="text-center">
                   <button
+                    v-if="hasPermission('admin_update')"
                     class="btn btn-sm btn-outline-primary me-2"
                     type="button"
                     title="Sửa"
@@ -111,6 +113,7 @@
                     <i class="bi bi-pencil-square"></i>
                   </button>
                   <button
+                    v-if="hasPermission('admin_delete')"
                     class="btn btn-sm btn-outline-danger"
                     type="button"
                     title="Xóa"
@@ -453,6 +456,19 @@ export default {
     this.fetchAdmins()
   },
   methods: {
+    hasPermission(code) {
+      try {
+        const raw = localStorage.getItem('admin_data');
+        if (!raw) return false;
+        const adminData = JSON.parse(raw);
+        const isSuperAdmin = Number(adminData?.id_chuc_vu || adminData?.chuc_vu) === 1;
+        if (isSuperAdmin) return true;
+        const chucNangs = adminData?.chuc_vu?.chuc_nangs || adminData?.chucVu?.chucNangs || [];
+        return chucNangs.some(p => p.ma_chuc_nang === code);
+      } catch (e) {
+        return false;
+      }
+    },
     resetCreateForm() {
       this.formErrors = {}
       this.create_admin = defaultCreateAdmin()

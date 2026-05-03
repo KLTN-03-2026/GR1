@@ -13,7 +13,7 @@
             <i class="bi bi-search"></i>
             <input v-model.trim="search" type="text" class="form-control" placeholder="Tìm kiếm người dùng...">
           </div>
-          <button class="btn btn-primary action-btn" data-bs-toggle="modal" data-bs-target="#addModal">
+          <button v-if="hasPermission('user_create')" class="btn btn-primary action-btn" data-bs-toggle="modal" data-bs-target="#addModal">
             <i class="bi bi-person-plus-fill me-2"></i>Thêm Tài Khoản
           </button>
         </div>
@@ -76,6 +76,7 @@
                 </td>
                 <td class="text-center">
                   <button
+                    v-if="hasPermission('user_status')"
                     class="btn btn-sm me-2"
                     :class="item.is_active == 1 ? 'btn-outline-warning' : 'btn-outline-success'"
                     type="button"
@@ -85,6 +86,7 @@
                     <i class="bi" :class="item.is_active == 1 ? 'bi-lock' : 'bi-unlock'"></i>
                   </button>
                   <button
+                    v-if="hasPermission('user_update')"
                     class="btn btn-sm btn-outline-primary me-2"
                     type="button"
                     title="Sửa"
@@ -92,7 +94,7 @@
                   >
                     <i class="bi bi-pencil-square"></i>
                   </button>
-                  <button class="btn btn-sm btn-outline-danger" type="button" title="Xóa" @click="moModalXoa(item)">
+                  <button v-if="hasPermission('user_delete')" class="btn btn-sm btn-outline-danger" type="button" title="Xóa" @click="moModalXoa(item)">
                     <i class="bi bi-trash3"></i>
                   </button>
                 </td>
@@ -497,6 +499,19 @@ export default {
     this.layDataUser();
   },
   methods: {
+    hasPermission(code) {
+      try {
+        const raw = localStorage.getItem('admin_data');
+        if (!raw) return false;
+        const adminData = JSON.parse(raw);
+        const isSuperAdmin = Number(adminData?.id_chuc_vu || adminData?.chuc_vu) === 1;
+        if (isSuperAdmin) return true;
+        const chucNangs = adminData?.chuc_vu?.chuc_nangs || adminData?.chucVu?.chucNangs || [];
+        return chucNangs.some(p => p.ma_chuc_nang === code);
+      } catch (e) {
+        return false;
+      }
+    },
     goPage(page) {
       if (page >= 1 && page <= this.totalPages) {
         this.currentPage = page;
