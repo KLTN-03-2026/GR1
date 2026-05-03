@@ -81,4 +81,11 @@ export function getApiErrorMessage(error, fallbackMessage) {
   return fallbackMessage || 'Đã xảy ra lỗi. Vui lòng thử lại.';
 }
 
+/**
+ * axiosExternal: dùng để gọi các API bên ngoài (không có baseURL backend).
+ * Ví dụ: OSRM routing, OpenWeather, v.v.
+ * Không tự động gắn Authorization header.
+ */
+export const axiosExternal = axios.create();
+
 export default api;

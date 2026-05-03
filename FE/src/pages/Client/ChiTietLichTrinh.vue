@@ -32,8 +32,9 @@
             <button v-if="trip.is_leader && isFinalized" class="btn btn-warning rounded-pill px-4 py-2 border-0 fw-bold shadow-sm d-flex align-items-center" @click="openUnfinalizeModal">
               <i class="bi bi-unlock-fill me-2"></i> Mở lại để sửa
             </button>
-            <button class="btn btn-outline-primary rounded-pill px-3 py-2 fw-bold d-flex align-items-center" @click="exportPDF">
-              <i class="bi bi-file-earmark-pdf-fill me-2"></i> Xuất PDF
+            <button class="btn btn-outline-primary rounded-pill px-3 py-2 fw-bold d-flex align-items-center" @click="exportExcel" :disabled="exportingExcel">
+              <span v-if="exportingExcel" class="spinner-border spinner-border-sm me-2"></span>
+              <i v-else class="bi bi-file-earmark-excel-fill me-2 text-success"></i> Xuất Excel
             </button>
             <!-- AI Optimization Button -->
             <button v-if="!isFinalized && (trip.is_member || trip.is_owner)" 
@@ -78,7 +79,7 @@
         <div v-else-if="trip.ngan_sach > 0" class="alert alert-success d-flex align-items-center mb-4 shadow-sm" role="alert" style="border-radius: 12px;">
             <i class="bi bi-check-circle-fill fs-4 me-3 text-success"></i>
             <div>
-                <strong class="text-success">Ngân sách an toàn!</strong> Lịch trình hiện tại đang nằm trong phạm vi ngân sách của bạn.
+                <strong class="text-success">Ngân sách an toàn!</strong> Lịch trình hiện tại đang nằm trong phạm vi ngân sách của bạn.(Chi phí chưa bao gồm khách sạn)
             </div>
         </div>
 
@@ -122,7 +123,7 @@
           <!-- LEFT: Timeline -->
           <div class="step3-left">
             <div class="timeline" v-if="lichTrinhTheoNgay[activeDayTab - 1] && lichTrinhTheoNgay[activeDayTab - 1].length > 0">
-              <div v-for="(item, idx) in lichTrinhTheoNgay[activeDayTab - 1]" :key="idx" class="timeline-item">
+              <div v-for="(item, idx) in lichTrinhTheoNgay[activeDayTab - 1]" :key="item.id || idx" class="timeline-item">
                 <div class="timeline-time">
                   <span class="time-badge">{{ item.gio_bat_dau || item.gio || '08:00' }}</span>
                   <span v-if="item.gio_ket_thuc" class="time-end-badge">{{ item.gio_ket_thuc }}</span>
@@ -143,10 +144,22 @@
                         <i class="bi bi-ticket-perforated me-1"></i>{{ formatCurrency(item.gia_ve) }} / người
                       </p>
                     </div>
-                    <div v-if="item.id_dia_diem && !isFinalized && (trip.is_member || trip.is_owner)" class="ms-auto align-self-start">
-                        <button class="btn btn-sm btn-outline-primary rounded-circle shadow-sm" @click="swapPlace(item)" title="Đổi địa điểm khác" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
-                            <i class="bi bi-arrow-repeat"></i>
-                        </button>
+                    <!-- Action buttons (only when not finalized and is member/owner) -->
+                    <div v-if="!isFinalized && (trip.is_member || trip.is_owner)" class="ms-auto align-self-start d-flex flex-column gap-1">
+                      <button v-if="item.id_dia_diem"
+                        class="btn btn-sm btn-outline-primary rounded-circle shadow-sm"
+                        @click="swapPlace(item)"
+                        title="Đổi địa điểm khác"
+                        style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+                        <i class="bi bi-arrow-repeat"></i>
+                      </button>
+                      <button
+                        class="btn btn-sm btn-outline-danger rounded-circle shadow-sm"
+                        @click="confirmRemovePlace(item, activeDayTab - 1, idx)"
+                        title="Xóa địa điểm này"
+                        style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+                        <i class="bi bi-trash3"></i>
+                      </button>
                     </div>
                   </div>
                   <div v-if="item.ghi_chu" class="tc-note mt-3 p-2 rounded" style="background: #f8fafc; border: 1px dashed #cbd5e1; font-size: 0.85rem; color: #475569;">
@@ -171,6 +184,64 @@
               </div>
               <h5 class="text-muted">Ngày này chưa có lịch trình</h5>
             </div>
+
+            <!-- ─── Thêm địa điểm vào ngày (chỉ khi chưa chốt) ─── -->
+            <div v-if="!isFinalized && (trip.is_member || trip.is_owner)" class="add-place-section mt-4">
+              <button
+                class="btn btn-outline-success rounded-pill px-4 py-2 fw-bold d-flex align-items-center gap-2 w-100 justify-content-center"
+                @click="toggleAddPlacePanel(activeDayTab - 1)"
+                style="border-style: dashed; border-width: 2px; background: rgba(16,185,129,0.04);">
+                <i class="bi bi-plus-circle-fill text-success"></i>
+                <span>Thêm địa điểm vào Ngày {{ activeDayTab }}</span>
+              </button>
+
+              <!-- Panel chọn địa điểm thêm vào -->
+              <div v-if="addPlacePanel.show && addPlacePanel.dayIdx === activeDayTab - 1" class="add-place-panel mt-3 p-3 rounded-4 border shadow-sm" style="background:#f8fbff;">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                  <h6 class="fw-bold mb-0"><i class="bi bi-search me-2 text-primary"></i>Tìm & chọn địa điểm</h6>
+                  <button class="btn-close btn-sm" @click="addPlacePanel.show = false"></button>
+                </div>
+
+                <!-- Search box -->
+                <div class="input-group mb-3">
+                  <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                  <input type="text" class="form-control" v-model="addPlacePanel.keyword"
+                    placeholder="Tìm theo tên địa điểm..." @input="filterAddPlaces">
+                </div>
+
+                <!-- Loading -->
+                <div v-if="addPlacePanel.loading" class="text-center py-3">
+                  <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                  <span class="ms-2 text-muted small">Đang tải danh sách...</span>
+                </div>
+
+                <!-- Place list -->
+                <div v-else class="add-place-list">
+                  <div v-if="addPlacePanel.filtered.length === 0" class="text-center text-muted py-3 small">
+                    <i class="bi bi-inbox fs-4 d-block mb-1"></i>Không tìm thấy địa điểm phù hợp
+                  </div>
+                  <div v-for="place in addPlacePanel.filtered.slice(0, 20)" :key="place.id"
+                    class="add-place-item d-flex align-items-center gap-2 p-2 rounded-3 mb-2"
+                    :class="{ 'already-added': isPlaceAlreadyInDay(place.id, addPlacePanel.dayIdx) }"
+                    style="background:#fff; border:1px solid #e2e8f0; cursor:pointer; transition:all 0.2s;"
+                    @click="!isPlaceAlreadyInDay(place.id, addPlacePanel.dayIdx) && addPlaceToDay(place, addPlacePanel.dayIdx)">
+                    <img :src="place.hinh_anh_chinh || place.hinh_anh || 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=60&q=60'"
+                      style="width:48px;height:40px;object-fit:cover;border-radius:8px;flex-shrink:0;">
+                    <div class="flex-grow-1 min-w-0">
+                      <div class="fw-bold text-dark" style="font-size:0.88rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ place.ten_dia_diem }}</div>
+                      <div class="text-muted" style="font-size:0.76rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ place.dia_chi }}</div>
+                    </div>
+                    <span v-if="isPlaceAlreadyInDay(place.id, addPlacePanel.dayIdx)" class="badge bg-secondary" style="font-size:0.68rem;">Đã có</span>
+                    <button v-else class="btn btn-success btn-sm rounded-pill px-2 py-1 flex-shrink-0" style="font-size:0.76rem;"
+                      @click.stop="addPlaceToDay(place, addPlacePanel.dayIdx)"
+                      :disabled="addPlacePanel.addingId === place.id">
+                      <span v-if="addPlacePanel.addingId === place.id" class="spinner-border spinner-border-sm"></span>
+                      <i v-else class="bi bi-plus"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <!-- RIGHT: Map + Route Info -->
@@ -180,6 +251,11 @@
                 <i class="bi bi-map me-2"></i>Bản đồ vị trí ngày {{ activeDayTab }}
               </div>
               <div id="trip-map" style="height: 500px"></div>
+              <!-- Route info panel -->
+              <div v-if="routeInfo.distance" class="d-flex align-items-center gap-3 p-2 px-3" style="background:#f0f9ff;border-top:1px solid #e0f2fe;">
+                <span class="small text-primary fw-bold"><i class="bi bi-signpost-2 me-1"></i>Tổng quãng đường: {{ routeInfo.distance }}</span>
+                <span class="small text-muted"><i class="bi bi-clock me-1"></i>Thời gian di chuyển: {{ routeInfo.duration }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -242,6 +318,27 @@
           </div>
         </div>
 
+      </div>
+    </div>
+
+    <!-- ─── Modal xác nhận xóa địa điểm ─── -->
+    <div v-if="removePlaceModal.show" class="schedule-confirm-overlay" @click.self="removePlaceModal.show = false">
+      <div class="schedule-confirm-box">
+        <button class="btn-close position-absolute top-0 end-0 m-4" @click="removePlaceModal.show = false"></button>
+        <div class="schedule-confirm-icon danger">
+          <i class="bi bi-trash3-fill"></i>
+        </div>
+        <h4 class="schedule-confirm-title">Xóa địa điểm</h4>
+        <p class="schedule-confirm-message">
+          Bạn có chắc muốn xóa <strong>"{{ removePlaceModal.item?.ten_dia_diem }}"</strong> khỏi lịch trình?
+        </p>
+        <div class="schedule-confirm-actions">
+          <button class="schedule-confirm-cancel" @click="removePlaceModal.show = false">Hủy</button>
+          <button class="schedule-confirm-submit danger" @click="doRemovePlace" :disabled="removePlaceModal.removing">
+            <span v-if="removePlaceModal.removing" class="spinner-border spinner-border-sm me-1"></span>
+            Xóa địa điểm
+          </button>
+        </div>
       </div>
     </div>
 
@@ -420,6 +517,7 @@
 </template>
 
 <script>
+import { axiosExternal } from '../../services/api';
 import api from '../../services/api';
 
 export default {
@@ -471,8 +569,31 @@ export default {
 
       mapInstance: null,
       mapLayers: [],
+      mapRouteLine: null,
+      routeInfo: { distance: '', duration: '' },
+      exportingExcel: false,
       loadingAI: false,
       socketChannel: null,
+
+      // ─── Xóa địa điểm modal ───
+      removePlaceModal: {
+        show: false,
+        item: null,
+        dayIdx: -1,
+        itemIdx: -1,
+        removing: false,
+      },
+
+      // ─── Panel thêm địa điểm ───
+      addPlacePanel: {
+        show: false,
+        dayIdx: -1,
+        keyword: '',
+        loading: false,
+        allPlaces: [],
+        filtered: [],
+        addingId: null,
+      },
     };
   },
 
@@ -530,6 +651,12 @@ export default {
     if (!window.html2pdf) {
       const script = document.createElement('script');
       script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+      document.head.appendChild(script);
+    }
+    // Load SheetJS for Excel export
+    if (!window.XLSX) {
+      const script = document.createElement('script');
+      script.src = 'https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js';
       document.head.appendChild(script);
     }
 
@@ -921,6 +1048,161 @@ export default {
             console.error(error);
         }
     },
+
+    // ─── Xóa địa điểm khỏi lịch trình ──────────────────
+    confirmRemovePlace(item, dayIdx, itemIdx) {
+      this.removePlaceModal = {
+        show: true,
+        item,
+        dayIdx,
+        itemIdx,
+        removing: false,
+      };
+    },
+
+    async doRemovePlace() {
+      const { item, dayIdx, itemIdx } = this.removePlaceModal;
+      if (!item) return;
+      this.removePlaceModal.removing = true;
+
+      try {
+        // Xóa bản ghi lich_trinh_dia_diem khỏi DB
+        if (item.id) {
+          await api.delete(`/lich-trinh-dia-diems/${item.id}`);
+        }
+
+        // Xóa khỏi local state
+        this.lichTrinhTheoNgay[dayIdx].splice(itemIdx, 1);
+        // Cập nhật rawPlaces
+        this.rawPlaces = this.rawPlaces.filter(p => p.id !== item.id);
+
+        this.$toast.success(`Đã xóa "${item.ten_dia_diem}" khỏi lịch trình.`);
+        this.removePlaceModal.show = false;
+
+        // Cập nhật lại bản đồ
+        this.$nextTick(() => {
+          this.renderMapForDay(dayIdx);
+        });
+      } catch (e) {
+        this.$toast.error('Lỗi khi xóa địa điểm. Vui lòng thử lại.');
+        console.error(e);
+      } finally {
+        this.removePlaceModal.removing = false;
+      }
+    },
+
+    // ─── Thêm địa điểm vào ngày ──────────────────────────
+    async toggleAddPlacePanel(dayIdx) {
+      if (this.addPlacePanel.show && this.addPlacePanel.dayIdx === dayIdx) {
+        this.addPlacePanel.show = false;
+        return;
+      }
+
+      this.addPlacePanel.show = true;
+      this.addPlacePanel.dayIdx = dayIdx;
+      this.addPlacePanel.keyword = '';
+
+      if (this.addPlacePanel.allPlaces.length === 0) {
+        this.addPlacePanel.loading = true;
+        try {
+          const res = await api.get('/client/dia-diem/get-data');
+          const json = res.data;
+          this.addPlacePanel.allPlaces = json.data || [];
+        } catch (e) {
+          this.$toast.error('Không thể tải danh sách địa điểm.');
+        } finally {
+          this.addPlacePanel.loading = false;
+        }
+      }
+
+      this.filterAddPlaces();
+    },
+
+    filterAddPlaces() {
+      const kw = (this.addPlacePanel.keyword || '').toLowerCase().trim();
+      const places = this.addPlacePanel.allPlaces;
+      this.addPlacePanel.filtered = kw
+        ? places.filter(p =>
+            (p.ten_dia_diem || '').toLowerCase().includes(kw) ||
+            (p.dia_chi || '').toLowerCase().includes(kw)
+          )
+        : places;
+    },
+
+    isPlaceAlreadyInDay(placeId, dayIdx) {
+      const day = this.lichTrinhTheoNgay[dayIdx] || [];
+      return day.some(item => item.id_dia_diem === placeId || item.id_dia_diem === String(placeId));
+    },
+
+    async addPlaceToDay(place, dayIdx) {
+      if (this.addPlacePanel.addingId === place.id) return;
+      this.addPlacePanel.addingId = place.id;
+
+      try {
+        // Tính giờ bắt đầu dựa trên item cuối cùng của ngày
+        const dayItems = this.lichTrinhTheoNgay[dayIdx] || [];
+        let startMin = 8 * 60; // Mặc định 08:00
+        if (dayItems.length > 0) {
+          const lastItem = dayItems[dayItems.length - 1];
+          const endTime = lastItem.gio_ket_thuc || lastItem.gio_bat_dau || '08:00';
+          const [h, m] = endTime.split(':').map(Number);
+          startMin = h * 60 + m + 30; // +30 phút di chuyển
+        }
+        const fmt = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+        const thuTu = (dayIdx * 100) + dayItems.length + 1;
+
+        const payload = {
+          id_chuyen_di: parseInt(this.tripId),
+          id_dia_diem: place.id,
+          gio_bat_dau: fmt(startMin),
+          gio_ket_thuc: fmt(startMin + 60),
+          thu_tu_tham_quan: thuTu,
+          ghi_chu: '',
+        };
+
+        const res = await api.post('/lich-trinh-dia-diems', payload);
+        const json = res.data;
+
+        if (json.status === 'success' || json.id || json.data?.id) {
+          this.$toast.success(`Đã thêm "${place.ten_dia_diem}" vào Ngày ${dayIdx + 1}!`);
+
+          // Thêm ngay vào local state để UI cập nhật tức thì
+          const newItem = {
+            id: json.data?.id || json.id,
+            id_dia_diem: place.id,
+            ten_dia_diem: place.ten_dia_diem,
+            dia_chi: place.dia_chi,
+            hinh_anh: place.hinh_anh_chinh || place.hinh_anh,
+            gia_ve: place.gia_ve || 0,
+            gio_bat_dau: fmt(startMin),
+            gio_ket_thuc: fmt(startMin + 60),
+            thoi_luong_phut: 60,
+            thu_tu_tham_quan: thuTu,
+            vi_do: place.vi_do,
+            kinh_do: place.kinh_do,
+            travel_tips: '',
+            ghi_chu: '',
+          };
+
+          this.lichTrinhTheoNgay[dayIdx].push(newItem);
+          this.rawPlaces.push(newItem);
+
+          this.$nextTick(() => {
+            this.renderMapForDay(dayIdx);
+          });
+        } else {
+          this.$toast.error(json.message || 'Không thể thêm địa điểm.');
+        }
+      } catch (e) {
+        const errMsg = e.response?.data?.message || 'Lỗi khi thêm địa điểm.';
+        this.$toast.error(errMsg);
+        console.error(e);
+      } finally {
+        this.addPlacePanel.addingId = null;
+      }
+    },
+
+
     async fetchMyGroups() {
       try {
         const [joinedRes, ownedRes] = await Promise.all([
@@ -966,40 +1248,99 @@ export default {
       }
     },
 
-    exportPDF() {
-      if (!window.html2pdf) {
-        this.$toast.warning('Tính năng xuất PDF đang tải, vui lòng thử lại sau vài giây.');
-        return;
+    async exportExcel() {
+      if (!this.trip) return;
+      this.exportingExcel = true;
+
+      try {
+        // Đảm bảo SheetJS đã được tải
+        if (!window.XLSX) {
+          this.$toast.info('Vui lòng chờ vài giây rồi thử lại...');
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          if (!window.XLSX) {
+            this.$toast.error('Không thể tải thư viện xuất Excel. Vui lòng thử lại.');
+            return;
+          }
+        }
+
+        const XLSX = window.XLSX;
+        const wb = XLSX.utils.book_new();
+
+        // === Sheet 1: Thông tin chuyến đi ===
+        const tripInfo = [
+          ['THÔNG TIN CHUYẾN ĐI', ''],
+          ['Tên chuyến đi', this.trip.ten_chuyen_di || ''],
+          ['Ngày bắt đầu', this.formatDateFull(this.trip.ngay_bat_dau)],
+          ['Thời gian', this.formatDuration(this.trip.so_ngay)],
+          ['Số thành viên', this.trip.so_nguoi || 1],
+          ['Ngân sách dự kiến', this.formatCurrency(this.trip.ngan_sach)],
+          ['Tổng giá vé dự kiến', this.formatCurrency(this.tongGiaVe)],
+          ['Tổng chi phí phát sinh', this.formatCurrency(this.tongChiPhiPhatSinh)],
+          ['Tổng chi phí', this.formatCurrency(this.tongChiPhiDuKien)],
+          ['Trạng thái', this.isFinalized ? 'Đã chốt' : 'Đang lên kế hoạch'],
+        ];
+        const ws1 = XLSX.utils.aoa_to_sheet(tripInfo);
+        ws1['!cols'] = [{ wch: 28 }, { wch: 40 }];
+        XLSX.utils.book_append_sheet(wb, ws1, 'Thông tin');
+
+        // === Sheet 2: Lịch trình theo ngày ===
+        const scheduleData = [['NGÀY', 'NGÀY/GIờ', 'THỜI GIAN BẮT ĐẦU', 'THỜI GIAN KẾT THÚC', 'THỜI LƯỢNG', 'ĐỊA ĐIỂM', 'ĐỊA CHỈ', 'GIÁ VÉ (VNĐ)', 'GHI CHÚ']];
+        this.lichTrinhTheoNgay.forEach((day, di) => {
+          if (day.length === 0) {
+            scheduleData.push([`Ngày ${di + 1}`, this.formatDateDate(this.trip.ngay_bat_dau, di), '', '', '', 'Chưa có lịch trình', '', '', '']);
+          } else {
+            day.forEach((item, idx) => {
+              scheduleData.push([
+                idx === 0 ? `Ngày ${di + 1}` : '',
+                idx === 0 ? this.formatDateDate(this.trip.ngay_bat_dau, di) : '',
+                item.gio_bat_dau || item.gio || '',
+                item.gio_ket_thuc || '',
+                item.thoi_luong_phut ? `${item.thoi_luong_phut} phút` : '',
+                item.ten_dia_diem || '',
+                item.dia_chi || 'Đà Nẵng',
+                Number(item.gia_ve) || 0,
+                item.ghi_chu || '',
+              ]);
+            });
+          }
+        });
+        const ws2 = XLSX.utils.aoa_to_sheet(scheduleData);
+        ws2['!cols'] = [
+          { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 },
+          { wch: 30 }, { wch: 30 }, { wch: 16 }, { wch: 30 }
+        ];
+        XLSX.utils.book_append_sheet(wb, ws2, 'Lịch trình');
+
+        // === Sheet 3: Chi phí phát sinh ===
+        if (this.incurredExpenses.length > 0) {
+          const expData = [['STT', 'NỘI DUNG', 'LOẠI CHI PHÍ', 'NGÀY CHI', 'SỐ TIỀN (VNĐ)', 'NGƯỜI THỰC HIỆN']];
+          this.incurredExpenses.forEach((exp, i) => {
+            expData.push([
+              i + 1,
+              exp.noi_dung || '',
+              exp.loai_chi_phi || 'Khác',
+              this.formatExpenseDate(exp.ngay_chi),
+              Number(exp.tong_chi_phi) || 0,
+              exp.nguoi_tra?.ten || 'Không rõ',
+            ]);
+          });
+          expData.push(['', 'TỔNG CỘNG', '', '', this.tongChiPhiPhatSinh, '']);
+          const ws3 = XLSX.utils.aoa_to_sheet(expData);
+          ws3['!cols'] = [{ wch: 6 }, { wch: 30 }, { wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 22 }];
+          XLSX.utils.book_append_sheet(wb, ws3, 'Chi phí phát sinh');
+        }
+
+        // Xuất file
+        const fileName = `LichTrinh_${(this.trip.ten_chuyen_di || 'chuyen-di').replace(/\s+/g, '_')}.xlsx`;
+        XLSX.writeFile(wb, fileName);
+        this.$toast.success('Xuất Excel thành công!');
+
+      } catch (err) {
+        console.error('Lỗi xuất Excel:', err);
+        this.$toast.error('Không thể xuất file Excel. Vui lòng thử lại.');
+      } finally {
+        this.exportingExcel = false;
       }
-      const hiddenEl = document.getElementById('pdf-summary-content');
-      if (!hiddenEl) return;
-      
-      // Clone element và hiển thị nó ra một div ảo ngoài màn hình để render PDF
-      const wrapper = document.createElement('div');
-      wrapper.style.position = 'absolute';
-      wrapper.style.left = '-9999px';
-      wrapper.style.top = '0';
-      wrapper.style.width = '800px';
-      wrapper.style.background = '#fff';
-      document.body.appendChild(wrapper);
-      
-      const element = hiddenEl.cloneNode(true);
-      element.style.display = 'block';
-      wrapper.appendChild(element);
-      
-      this.$toast.info('Đang tạo file PDF tóm tắt, vui lòng đợi...', { timeout: 3000 });
-      
-      const opt = {
-        margin: [10, 10, 10, 10],
-        filename: `Tom-Tat-Lich-Trinh-${this.trip.ten_chuyen_di}.pdf`,
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-      };
-      
-      window.html2pdf().set(opt).from(element).save().then(() => {
-          document.body.removeChild(wrapper);
-      });
     },
 
     confettiStyle(n) {
@@ -1080,6 +1421,7 @@ export default {
         }
 
         this.clearMapLayers();
+        this.routeInfo = { distance: '', duration: '' };
 
         const dayItems = this.lichTrinhTheoNgay[dayIndex] || [];
         const validItems = dayItems.filter(item => item.vi_do && item.kinh_do);
@@ -1094,27 +1436,31 @@ export default {
 
           bounds.push([lat, lng]);
 
+          // Màu: đầu=xanh lá, giữa=xanh dương, cuối=đỏ
+          const colors = ['#10b981', '#0ea5e9', '#8b5cf6', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6', '#6366f1'];
+          const bgColor = idx === 0 ? '#10b981' : idx === validItems.length - 1 ? '#ef4444' : colors[idx % colors.length];
+
           const icon = L.divIcon({
             className: '',
             html: `<div style="
-              background: #10b981; color: #fff; border-radius: 50%;
-              width: 32px; height: 32px; display: flex; align-items: center;
-              justify-content: center; font-weight: bold; font-size: 14px;
-              border: 3px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-              position: relative; top: -16px; left: -16px;
+              background: ${bgColor}; color: #fff; border-radius: 50%;
+              width: 34px; height: 34px; display: flex; align-items: center;
+              justify-content: center; font-weight: 800; font-size: 14px;
+              border: 3px solid #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+              position: relative; top: -17px; left: -17px;
             ">${idx + 1}</div>`,
             iconSize: [0, 0],
-            iconAnchor: [16, 16],
+            iconAnchor: [0, 0],
           });
 
           const marker = L.marker([lat, lng], { icon })
             .bindPopup(`
-              <div style="min-width:180px; font-family: 'Inter', sans-serif;">
+              <div style="min-width:190px; font-family: 'Inter', sans-serif;">
                 <strong style="font-size:15px; color: #1e293b;">${item.ten_dia_diem}</strong><br>
                 <small style="color:#64748b"><i class="bi bi-geo-alt me-1"></i>${item.dia_chi || 'Đà Nẵng'}</small><br>
-                 <div class="mt-2 text-primary fw-bold"><i class="bi bi-clock me-1"></i>${item.gio_bat_dau || ''}</div>
+                 <div class="mt-2 text-primary fw-bold"><i class="bi bi-clock me-1"></i>${item.gio_bat_dau || item.gio || ''}</div>
               </div>
-            `, { maxWidth: 220 })
+            `, { maxWidth: 230 })
             .addTo(this.mapInstance);
 
           this.mapLayers.push(marker);
@@ -1124,15 +1470,42 @@ export default {
           this.mapInstance.fitBounds(bounds, { padding: [50, 50] });
         }
         
-        // Vẽ đường polyline nối các điểm
+        // Vẽ tuyến đường thực tế qua OSRM routing API
         if (bounds.length > 1) {
-            this.mapRouteLine = L.polyline(bounds, {
+          const coordinates = bounds.map(([lat, lng]) => `${lng},${lat}`).join(';');
+          const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson`;
+          
+          axiosExternal.get(osrmUrl).then(routeRes => {
+            const routeData = routeRes.data;
+            if (routeData.routes && routeData.routes[0]) {
+              const route = routeData.routes[0];
+              const routeCoords = route.geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+              
+              // Hiển thị thông tin tuyến đường
+              const distKm = (route.distance / 1000).toFixed(1);
+              const durMin = Math.round(route.duration / 60);
+              this.routeInfo = {
+                distance: `${distKm} km`,
+                duration: durMin >= 60 ? `${Math.floor(durMin/60)}h ${durMin%60}p` : `${durMin} phút`
+              };
+
+              const routeLine = L.polyline(routeCoords, {
                 color: '#0ea5e9',
-                weight: 4,
-                opacity: 0.8,
-                dashArray: '10, 10',
-                lineJoin: 'round'
-            }).addTo(this.mapInstance);
+                weight: 5,
+                opacity: 0.9,
+                lineJoin: 'round',
+                lineCap: 'round',
+              }).addTo(this.mapInstance);
+              this.mapLayers.push(routeLine);
+            } else {
+              // Fallback
+              const fallbackLine = L.polyline(bounds, { color: '#0ea5e9', weight: 4, opacity: 0.7, dashArray: '10, 8' }).addTo(this.mapInstance);
+              this.mapLayers.push(fallbackLine);
+            }
+          }).catch(() => {
+            const fallbackLine = L.polyline(bounds, { color: '#0ea5e9', weight: 4, opacity: 0.7, dashArray: '10, 8' }).addTo(this.mapInstance);
+            this.mapLayers.push(fallbackLine);
+          });
         }
       };
 
@@ -1496,5 +1869,45 @@ export default {
 .rating-modal-enter-from, .rating-modal-leave-to { opacity: 0; }
 .fade-slide-enter-active, .fade-slide-leave-active { transition: all 0.3s ease; }
 .fade-slide-enter-from, .fade-slide-leave-to { opacity: 0; transform: translateY(-8px); }
+
+/* ─── Add Place Panel ─── */
+.add-place-section { margin-top: 1.25rem; }
+.add-place-panel {
+  border: 1px solid #e0f2fe !important;
+  animation: fadeInDown 0.25s ease;
+}
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.add-place-list {
+  max-height: 340px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.add-place-list::-webkit-scrollbar { width: 5px; }
+.add-place-list::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+.add-place-item:hover:not(.already-added) {
+  border-color: #10b981 !important;
+  background: #f0fdf4 !important;
+  transform: translateX(2px);
+}
+.add-place-item.already-added {
+  opacity: 0.55;
+  cursor: default !important;
+}
+
+/* ─── Trash button animation ─── */
+.btn-outline-danger:hover {
+  animation: shake 0.35s ease;
+}
+@keyframes shake {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-12deg); }
+  75% { transform: rotate(12deg); }
+}
+
 </style>
 

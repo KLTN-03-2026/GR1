@@ -505,6 +505,7 @@
 </template>
 
 <script>
+import { axiosExternal } from '../../services/api.js';
 import api from '../../services/api.js';
 
 export default {
@@ -953,7 +954,7 @@ export default {
           + `&hourly=temperature_2m,weathercode`
           + `&timezone=Asia%2FHo_Chi_Minh`
           + `&start_date=${this.form.ngay_bat_dau}&end_date=${this.form.ngay_ket_thuc}`;
-        const res = await api.get(url);
+        const res = await axiosExternal.get(url);
         const json = res.data;
         if (!json.daily) return { daily: [], hourly: {} };
 
@@ -1169,8 +1170,60 @@ export default {
 
     // ─── Xóa item trong lịch trình ──
     removeItem(dayIdx, itemIdx) {
+      const removedItem = this.lichTrinhTheoNgay[dayIdx][itemIdx];
       this.lichTrinhTheoNgay[dayIdx].splice(itemIdx, 1);
+
+      // Xóa khỏi danh sách đã chọn → cho phép chọn lại ở bước 2
+      if (removedItem && removedItem.id_dia_diem) {
+        const selIdx = this.selectedDiaDiem.findIndex(d => d.id === removedItem.id_dia_diem);
+        if (selIdx !== -1) {
+          this.selectedDiaDiem.splice(selIdx, 1);
+        }
+      }
+
+      // Tái tính lại giờ cho các item còn lại trong ngày (tránh khoảng trống)
+      this.recalcDayTimes(dayIdx);
+
+      // Cập nhật bản đồ
+      this.$nextTick(() => {
+        this.renderMapForDay(dayIdx);
+      });
     },
+
+    // ─── Tái tính giờ cho 1 ngày sau khi thêm/xóa ──
+    recalcDayTimes(dayIdx) {
+      const fmt = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+      const haversine = (lat1, lon1, lat2, lon2) => {
+        if (!lat1 || !lon1 || !lat2 || !lon2) return 5;
+        const R = 6371, dLat = (lat2 - lat1) * Math.PI / 180, dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      };
+
+      const day = this.lichTrinhTheoNgay[dayIdx];
+      if (!day || day.length === 0) return;
+
+      let curMin = 7 * 60; // 07:00 mặc định cho ngày
+      let curLat = 16.0544, curLng = 108.2022;
+
+      day.forEach(item => {
+        const dist = haversine(curLat, curLng, parseFloat(item.vi_do) || curLat, parseFloat(item.kinh_do) || curLng);
+        const travelMin = Math.max(5, Math.min(30, Math.ceil(dist / 20 * 60) + 5));
+        const startMin = curMin + travelMin;
+        const dur = item.thoi_luong_phut || 60;
+        const endMin = startMin + dur;
+
+        item.gio = fmt(startMin);
+        item.gio_bat_dau = fmt(startMin);
+        item.gio_ket_thuc = fmt(endMin);
+
+        curLat = parseFloat(item.vi_do) || curLat;
+        curLng = parseFloat(item.kinh_do) || curLng;
+        curMin = endMin;
+      });
+    },
+
+
 
     // ─── Lưu lịch trình ─────────────────────────
     async saveLichTrinh(skipRating = false) {
@@ -1284,7 +1337,6 @@ export default {
     async renderMapForDay(dayIndex) {
       const L = window.L;
       if (!L) {
-        // Leaflet may still be loading; retry after a short delay
         setTimeout(() => this.renderMapForDay(dayIndex), 500);
         return;
       }
@@ -1298,7 +1350,6 @@ export default {
 
       if (validItems.length === 0) return;
 
-      // Create numbered markers for each location
       const bounds = [];
       validItems.forEach((item, idx) => {
         const lat = parseFloat(item.vi_do);
@@ -1307,35 +1358,69 @@ export default {
 
         bounds.push([lat, lng]);
 
+        // Màu gradient theo thứ tự: start=xanh lá, giữa=xanh dương, end=tím
+        const colors = ['#10b981', '#0ea5e9', '#8b5cf6', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6', '#6366f1'];
+        const bgColor = idx === 0 ? '#10b981' : idx === validItems.length - 1 ? '#ef4444' : colors[idx % colors.length];
+
         const icon = L.divIcon({
           className: '',
           html: `<div style="
-            background: #5a67d8; color: #fff; border-radius: 50%;
-            width: 32px; height: 32px; display: flex; align-items: center;
-            justify-content: center; font-weight: 700; font-size: 14px;
-            border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            background: ${bgColor}; color: #fff; border-radius: 50%;
+            width: 34px; height: 34px; display: flex; align-items: center;
+            justify-content: center; font-weight: 800; font-size: 14px;
+            border: 3px solid #fff; box-shadow: 0 3px 10px rgba(0,0,0,0.35);
           ">${idx + 1}</div>`,
-          iconSize: [32, 32],
-          iconAnchor: [16, 16],
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
         });
 
         const imgUrl = item.hinh_anh || 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=200&q=60';
         const marker = L.marker([lat, lng], { icon })
           .bindPopup(`
-            <div style="min-width:180px">
+            <div style="min-width:190px; font-family: 'Inter', sans-serif;">
               <img src="${imgUrl}" style="width:100%;height:90px;object-fit:cover;border-radius:6px;margin-bottom:6px">
-              <strong style="font-size:14px">${item.ten_dia_diem}</strong><br>
-              <small style="color:#666">${item.dia_chi || 'Đà Nẵng'}</small><br>
-              <small>🕐 ${item.gio}</small>
+              <strong style="font-size:14px;color:#1e2d44">${item.ten_dia_diem}</strong><br>
+              <small style="color:#64748b">📍 ${item.dia_chi || 'Đà Nẵng'}</small><br>
+              <small style="color:#10b981;font-weight:600">🕐 ${item.gio_bat_dau || item.gio}</small>
             </div>
-          `, { maxWidth: 220 })
+          `, { maxWidth: 230 })
           .addTo(this.mapInstance);
 
         this.mapLayers.push(marker);
       });
 
       if (bounds.length > 0) {
-        this.mapInstance.fitBounds(bounds, { padding: [40, 40] });
+        this.mapInstance.fitBounds(bounds, { padding: [50, 50] });
+      }
+
+      // Vẽ tuyến đường thực tế qua OSRM routing API
+      if (bounds.length > 1) {
+        const coordinates = bounds.map(([lat, lng]) => `${lng},${lat}`).join(';');
+        const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson`;
+        
+        axiosExternal.get(osrmUrl).then(routeRes => {
+          const routeData = routeRes.data;
+
+          if (routeData.routes && routeData.routes[0]) {
+            const routeCoords = routeData.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+            const routeLine = L.polyline(routeCoords, {
+              color: '#0ea5e9',
+              weight: 5,
+              opacity: 0.85,
+              lineJoin: 'round',
+              lineCap: 'round',
+            }).addTo(this.mapInstance);
+            this.mapLayers.push(routeLine);
+          } else {
+            // Fallback: vẽ đường thẳng nếu OSRM không có dữ liệu
+            const fallbackLine = L.polyline(bounds, { color: '#0ea5e9', weight: 4, opacity: 0.7, dashArray: '10, 8' }).addTo(this.mapInstance);
+            this.mapLayers.push(fallbackLine);
+          }
+        }).catch(() => {
+          // Fallback khi lỗi mạng
+          const fallbackLine = L.polyline(bounds, { color: '#0ea5e9', weight: 4, opacity: 0.7, dashArray: '10, 8' }).addTo(this.mapInstance);
+          this.mapLayers.push(fallbackLine);
+        });
       }
     },
 
