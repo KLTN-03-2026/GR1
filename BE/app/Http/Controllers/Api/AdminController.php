@@ -65,6 +65,25 @@ class AdminController extends Controller
         ], 200);
     }
 
+    public function me(Request $request)
+    {
+        $adminId = $request->user()->id;
+        $admin = Admin::with(['chucVu.chucNangs'])->find($adminId);
+
+        if (!$admin) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Không tìm thấy thông tin quản trị viên.',
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Lấy thông tin thành công.',
+            'data' => $admin,
+        ], 200);
+    }
+
     public function create(StoreAdminRequest $request)
     {
         $admin = Admin::create([

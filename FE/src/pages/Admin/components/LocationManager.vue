@@ -32,6 +32,28 @@
         </div>
       </div>
 
+      <!-- Filter category chips -->
+      <div v-if="activeCategories.length" class="filter-bar px-4 py-3 border-bottom">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <span class="filter-label"><i class="bi bi-funnel me-1"></i>Loại:</span>
+          <button
+            class="filter-chip"
+            :class="{ 'active': filterCategory === 'Tất cả' }"
+            @click="filterCategory = 'Tất cả'"
+          >Tất cả <span class="chip-count">{{ places.length }}</span></button>
+          <button
+            v-for="cat in activeCategories"
+            :key="cat.id"
+            class="filter-chip"
+            :class="{ 'active': filterCategory === cat.ten_danh_muc }"
+            @click="filterCategory = cat.ten_danh_muc"
+          >
+            {{ cat.ten_danh_muc }}
+            <span class="chip-count">{{ places.filter(p => p.loai_dia_diem === cat.ten_danh_muc).length }}</span>
+          </button>
+        </div>
+      </div>
+
       <div class="card-body p-0">
         <div v-if="loading" class="state-box">
           <div class="spinner-border text-primary mb-3" role="status"></div>
@@ -346,8 +368,18 @@ export default {
     }
   },
   computed: {
+    activeCategories() {
+      // Chỉ hiển thị chip danh mục nào có ít nhất 1 địa điểm trong trang hiện tại
+      const usedTypes = new Set(this.places.map(p => p.loai_dia_diem).filter(Boolean));
+      return this.categories.filter(cat => usedTypes.has(cat.ten_danh_muc));
+    },
     filteredPlaces() {
       let filtered = this.places;
+
+      // Filter by category chip
+      if (this.filterCategory && this.filterCategory !== 'Tất cả') {
+        filtered = filtered.filter(p => p.loai_dia_diem === this.filterCategory);
+      }
 
       // Filter by keyword
       const keyword = this.keyword.toLowerCase()
@@ -730,6 +762,65 @@ export default {
 .staff-name {
   font-weight: 700;
   color: #0f172a;
+}
+
+/* ===== Filter Chips ===== */
+.filter-bar {
+  background: #fafbff;
+}
+
+.filter-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #94a3b8;
+  white-space: nowrap;
+  margin-right: 4px;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1.5px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.filter-chip:hover {
+  border-color: #818cf8;
+  color: #4f46e5;
+  background: #eef2ff;
+}
+
+.filter-chip.active {
+  background: linear-gradient(90deg, #4f46e5, #6366f1);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+.chip-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.1);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.filter-chip.active .chip-count {
+  background: rgba(255,255,255,0.25);
 }
 
 .role-badge {

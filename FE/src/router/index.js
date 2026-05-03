@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
+import api from '../services/api.js';
 
 const routes = [
   // =================== Client routes =================
@@ -187,16 +188,38 @@ const router = createRouter({
   routes: routes,
 });
 
-router.beforeEach((to, from, next) => {
+let isFirstLoad = true;
+
+router.beforeEach(async (to, from, next) => {
   // Chỉ kiểm tra các route trong khu vực Admin (ngoại trừ trang đăng nhập)
   if (to.path.startsWith('/admin') && to.path !== '/admin/dang-nhap') {
     const raw = localStorage.getItem('admin_data');
-    if (!raw) {
+    const token = localStorage.getItem('key_admin');
+    
+    if (!raw || !token) {
       return next('/admin/dang-nhap');
     }
 
+    if (isFirstLoad) {
+      isFirstLoad = false;
+      try {
+        const res = await api.get('/admin/me', { headers: { Authorization: `Bearer ${token}` } });
+        if (res.data?.status) {
+          localStorage.setItem('admin_data', JSON.stringify(res.data.data));
+        }
+      } catch (error) {
+        if (error.response?.status === 401 || error.response?.status === 403) {
+           localStorage.removeItem('key_admin');
+           localStorage.removeItem('admin_data');
+           return next('/admin/dang-nhap');
+        }
+      }
+    }
+
+    const newRaw = localStorage.getItem('admin_data');
+
     try {
-      const adminData = JSON.parse(raw);
+      const adminData = JSON.parse(newRaw);
       const isSuperAdmin = Number(adminData?.id_chuc_vu || adminData?.chuc_vu) === 1;
       
       // Nếu là super admin thì qua thoải mái
@@ -207,13 +230,15 @@ router.beforeEach((to, from, next) => {
       // Logic ánh xạ: Path -> Mã quyền cần thiết
       const routePermissions = {
         '/admin/dashboard': 'dashboard_view',
-        '/admin/users': 'user_manage',
-        '/admin/danh-muc': 'category_manage',
-        '/admin/am-thuc': 'place_amthuc_manage',
-        '/admin/tam-linh': 'place_tamlinh_manage',
-        '/admin/giai-tri': 'place_giaitri_manage',
-        '/admin/check-in': 'place_checkin_manage',
-        '/admin/quan-ly-danh-gia-phan-hoi': 'review_manage',
+        '/admin/users': 'user_view',
+        '/admin/danh-sach-nhan-vien': 'admin_view',
+        '/admin/phan-quyen': 'SUPER_ADMIN_ONLY',
+        '/admin/danh-muc': 'category_view',
+        '/admin/am-thuc': 'place_amthuc_view',
+        '/admin/tam-linh': 'place_tamlinh_view',
+        '/admin/giai-tri': 'place_giaitri_view',
+        '/admin/check-in': 'place_checkin_view',
+        '/admin/quan-ly-danh-gia-phan-hoi': 'review_view',
         '/admin/danh-gia-hai-long': 'report_view',
         '/admin/reports': 'report_view'
       };
