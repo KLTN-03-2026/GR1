@@ -35,6 +35,9 @@
             <button class="btn btn-outline-primary rounded-pill px-3 py-2 fw-bold d-flex align-items-center" @click="exportPDF">
               <i class="bi bi-file-earmark-pdf-fill me-2"></i> Xuất PDF
             </button>
+            <button class="btn btn-outline-success rounded-pill px-3 py-2 fw-bold d-flex align-items-center" @click="exportExcel">
+              <i class="bi bi-file-earmark-excel-fill me-2"></i> Xuất Excel
+            </button>
             <!-- AI Optimization Button -->
             <button v-if="!isFinalized && (trip.is_member || trip.is_owner)" 
               class="btn btn-outline-dark rounded-pill px-3 py-2 fw-bold d-flex align-items-center" 
@@ -998,6 +1001,129 @@ export default {
         console.error(e);
       } finally {
         this.sendingShare = false;
+      }
+    },
+
+    exportExcel() {
+      const loadXlsxAndExport = () => {
+        const XLSX = window.XLSX;
+        if (!XLSX) return;
+
+        const wb = XLSX.utils.book_new();
+
+        // 1. Sheet Tổng quan: Chi tiết hơn về chuyến đi
+        const overviewData = [
+          ["THÔNG TIN TỔNG QUAN CHUYẾN ĐI"],
+          [""],
+          ["Tên chuyến đi", this.trip?.ten_chuyen_di || ""],
+          ["Mô tả", this.trip?.mo_ta || "Không có mô tả"],
+          ["Ngày bắt đầu", this.formatDateFull(this.trip?.ngay_bat_dau)],
+          ["Thời lượng", this.formatDuration(this.trip?.so_ngay)],
+          ["Số lượng thành viên", (this.trip?.so_nguoi || 1) + " người"],
+          ["Ngân sách dự kiến", this.trip?.ngan_sach ? this.formatCurrency(this.trip.ngan_sach) : "Không giới hạn"],
+          ["Tổng chi phí thực tế (Dự kiến)", this.formatCurrency(this.tongChiPhiDuKien)],
+          [""],
+          ["DANH SÁCH THÀNH VIÊN NHÓM"]
+        ];
+
+        // Thêm danh sách thành viên nếu có
+        if (this.trip?.thanh_viens && this.trip.thanh_viens.length > 0) {
+          this.trip.thanh_viens.forEach((m, i) => {
+            overviewData.push([`Thành viên ${i+1}`, m.name || m.email || "N/A", m.pivot?.vai_tro === 'truong_nhom' ? "(Trưởng nhóm)" : ""]);
+          });
+        } else {
+          overviewData.push(["Chưa có danh sách thành viên cụ thể"]);
+        }
+
+        const overviewWs = XLSX.utils.aoa_to_sheet(overviewData);
+        overviewWs['!cols'] = [{ wch: 25 }, { wch: 40 }, { wch: 15 }]; // Độ rộng cột
+        XLSX.utils.book_append_sheet(wb, overviewWs, "Tổng quan");
+
+        // 2. Sheet Lịch trình: Chi tiết từng địa điểm, địa chỉ, ghi chú và tips
+        const itineraryData = [
+          ["CHI TIẾT LỊCH TRÌNH THEO NGÀY"],
+          [""],
+          ["Ngày", "Thời gian", "Tên địa điểm", "Địa chỉ", "Vị trí (Kinh độ, Vĩ độ)", "Thời tiết dự kiến", "Hoạt động", "Giá vé (VND)", "Thành tiền (VND)", "Ghi chú/Mô tả", "AI Travel Tips (Lời khuyên)"]
+        ];
+
+        this.lichTrinhTheoNgay.forEach((day, index) => {
+          const dateLabel = this.formatDateDate(this.trip?.ngay_bat_dau, index);
+          itineraryData.push([`--- NGÀY ${index + 1} (${dateLabel}) ---`]);
+          
+          day.forEach((item) => {
+            const price = Number(item.gia_ve) || 0;
+            const total = price * (this.trip?.so_nguoi || 1);
+            const coordinates = (item.kinh_do && item.vi_do) ? `${item.kinh_do}, ${item.vi_do}` : (item.dia_diem?.kinh_do ? `${item.dia_diem.kinh_do}, ${item.dia_diem.vi_do}` : 'N/A');
+            
+            itineraryData.push([
+              `Ngày ${index + 1}`,
+              `${item.gio_bat_dau || ''} - ${item.gio_ket_thuc || ''}`,
+              item.ten_dia_diem || item.dia_diem?.ten_dia_diem || 'N/A',
+              item.dia_diem?.dia_chi || 'N/A',
+              coordinates,
+              "Nắng nhẹ/Mây rải rác", // Giá trị mặc định hoặc từ data nếu có
+              item.loai_hoat_dong || 'Tham quan',
+              this.formatCurrency(price),
+              this.formatCurrency(total),
+              item.ghi_chu || '',
+              item.travel_tips || ''
+            ]);
+          });
+          itineraryData.push([]); // Dòng trống giữa các ngày
+        });
+
+        const itineraryWs = XLSX.utils.aoa_to_sheet(itineraryData);
+        itineraryWs['!cols'] = [
+          { wch: 15 }, { wch: 15 }, { wch: 25 }, { wch: 35 }, 
+          { wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 30 }, { wch: 45 }
+        ];
+        XLSX.utils.book_append_sheet(wb, itineraryWs, "Lịch trình chi tiết");
+
+        // 3. Sheet Chi phí phát sinh: Đầy đủ các khoản thu chi
+        const expenseData = [
+          ["DANH SÁCH CHI PHÍ PHÁT SINH TRONG CHUYẾN ĐI"],
+          [""],
+          ["Ngày chi", "Hạng mục", "Số tiền (VND)", "Người chi", "Ghi chú"]
+        ];
+
+        if (this.expenses && this.expenses.length > 0) {
+          this.expenses.forEach(exp => {
+            expenseData.push([
+              this.formatExpenseDate(exp.ngay_chi),
+              exp.hang_muc,
+              this.formatCurrency(exp.so_tien),
+              exp.user?.name || 'Thành viên',
+              exp.ghi_chu || ''
+            ]);
+          });
+          
+          // Thêm dòng tổng cộng
+          const totalExp = this.expenses.reduce((sum, e) => sum + Number(e.so_tien), 0);
+          expenseData.push([]);
+          expenseData.push(["", "TỔNG CỘNG PHÁT SINH:", this.formatCurrency(totalExp)]);
+        } else {
+          expenseData.push(["Chưa có khoản chi phí phát sinh nào được ghi nhận"]);
+        }
+
+        const expenseWs = XLSX.utils.aoa_to_sheet(expenseData);
+        expenseWs['!cols'] = [{ wch: 15 }, { wch: 20 }, { wch: 15 }, { wch: 20 }, { wch: 40 }];
+        XLSX.utils.book_append_sheet(wb, expenseWs, "Chi phí phát sinh");
+
+        // Xuất file với tên chuẩn hóa
+        const rawName = this.trip?.ten_chuyen_di || 'Chuyen-Di-Cua-Toi';
+        const safeName = rawName.replace(/[/\\?%*:|"<>]/g, '-');
+        XLSX.writeFile(wb, `Lich-Trinh-Chi-Tiet-${safeName}.xlsx`);
+        this.$toast.success('Đã xuất file Excel chi tiết thành công!');
+      };
+
+      if (!window.XLSX) {
+        this.$toast.info('Đang tải thư viện xuất Excel...', { timeout: 2000 });
+        const script = document.createElement('script');
+        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+        script.onload = () => loadXlsxAndExport();
+        document.head.appendChild(script);
+      } else {
+        loadXlsxAndExport();
       }
     },
 
