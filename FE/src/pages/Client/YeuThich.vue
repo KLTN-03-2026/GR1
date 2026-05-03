@@ -157,7 +157,7 @@
 </template>
 
 <script>
-const BASE = 'http://localhost:8000/api';
+import api from '../../services/api';
 
 export default {
   name: 'YeuThich',
@@ -203,12 +203,8 @@ export default {
       this.loading = true;
       this.error = null;
       try {
-        const res = await fetch(`${BASE}/client/yeu-thich`, {
-          headers: {
-            'Authorization': `Bearer ${this.token}`
-          }
-        });
-        const json = await res.json();
+        const res = await api.get('/client/yeu-thich');
+        const json = res.data;
         if (json.status === 'success') {
           this.places = json.data;
         } else {
@@ -223,15 +219,10 @@ export default {
 
     async toggleFavorite(place) {
       try {
-        const res = await fetch(`${BASE}/client/yeu-thich/toggle`, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.token}`
-          },
-          body: JSON.stringify({ id_dia_diem: place.id })
+        const res = await api.post('/client/yeu-thich/toggle', {
+          id_dia_diem: place.id
         });
-        const json = await res.json();
+        const json = res.data;
         if (json.status) {
           // Xóa khỏi danh sách hiển thị nếu bỏ yêu thích
           if (!json.is_favorite) {

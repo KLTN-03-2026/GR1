@@ -36,11 +36,8 @@
           <li class="nav-item">
             <router-link to="/nhom-du-lich" class="nav-link">Nhóm du lịch</router-link>
           </li>
-
-          <li v-if="isLoggedIn" class="nav-item">
-            <router-link to="/lich-trinh-cua-toi" class="nav-link">
-              <i class="bi bi-map me-1"></i>Lịch trình của tôi
-            </router-link>
+          <li class="nav-item" v-if="isLoggedIn">
+            <router-link to="/lich-trinh-cua-toi" class="nav-link">Lịch trình của tôi</router-link>
           </li>
         </ul>
 
@@ -131,7 +128,7 @@ export default {
         return this.userAvatar
       }
       const cleanPath = this.userAvatar.startsWith('/') ? this.userAvatar : `/${this.userAvatar}`
-      return `http://127.0.0.1:8000${cleanPath}`
+      return `${(import.meta.env.VITE_BACKEND_URL || '').replace(/\/+$/, '')}${cleanPath}`
     }
   },
   mounted() {

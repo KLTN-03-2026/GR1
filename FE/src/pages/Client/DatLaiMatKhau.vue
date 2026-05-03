@@ -134,9 +134,9 @@
 </template>
 
 <script>
-import axios from 'axios';
+import api from '../../services/api.js';
 
-const API_URL = 'http://127.0.0.1:8000/api/client/dat-lai-mat-khau';
+const API_URL = '/client/dat-lai-mat-khau';
 
 export default {
     name: 'DatLaiMatKhau',
@@ -206,7 +206,7 @@ export default {
                     mat_khau_moi: this.form.mat_khau_moi,
                 };
 
-                const res = await axios.post(API_URL, payload);
+                const res = await api.post(API_URL, payload);
 
                 if (!res.data?.status) {
                     this.$toast.error(res.data?.message || 'Không thể đặt lại mật khẩu.');

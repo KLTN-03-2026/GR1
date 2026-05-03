@@ -168,9 +168,9 @@
 </template>
 
 <script>
-import axios from 'axios';
+import api from '../../services/api.js';
 
-const BASE = 'http://127.0.0.1:8000/api/admin';
+const BASE = '/admin';
 
 const FACE_DATA = [
   { value: 1, icon: '😞', label: 'Rất tệ',    color: '#ef4444', light: '#fef2f2' },
@@ -246,7 +246,7 @@ export default {
         if (this.filterRating) params.append('rating', this.filterRating);
         if (this.searchQ)     params.append('search', this.searchQ);
 
-        const { data } = await axios.get(`${BASE}/danh-gia-he-thong?${params}`, this.authHeader());
+        const { data } = await api.get(`${BASE}/danh-gia-he-thong?${params}`, this.authHeader());
         this.list       = data.data?.data  ?? [];
         this.pagination = { current_page: data.data?.current_page ?? 1, last_page: data.data?.last_page ?? 1 };
         this.stats      = data.stats ?? {};
@@ -280,7 +280,7 @@ export default {
     async deleteItem(item) {
       if (!confirm(`Xoá đánh giá #${item.id}?`)) return;
       try {
-        await axios.delete(`${BASE}/danh-gia-he-thong/${item.id}`, this.authHeader());
+        await api.delete(`${BASE}/danh-gia-he-thong/${item.id}`, this.authHeader());
         this.fetchData(this.pagination.current_page);
       } catch (e) {
         alert('Lỗi khi xoá!');

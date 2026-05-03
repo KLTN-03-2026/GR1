@@ -35,9 +35,6 @@
             <button class="btn btn-outline-primary rounded-pill px-3 py-2 fw-bold d-flex align-items-center" @click="exportPDF">
               <i class="bi bi-file-earmark-pdf-fill me-2"></i> Xuất PDF
             </button>
-            <button class="btn btn-outline-success rounded-pill px-3 py-2 fw-bold d-flex align-items-center" @click="exportExcel">
-              <i class="bi bi-file-earmark-excel-fill me-2"></i> Xuất Excel
-            </button>
             <!-- AI Optimization Button -->
             <button v-if="!isFinalized && (trip.is_member || trip.is_owner)" 
               class="btn btn-outline-dark rounded-pill px-3 py-2 fw-bold d-flex align-items-center" 
@@ -423,7 +420,7 @@
 </template>
 
 <script>
-const BASE = 'http://localhost:8000/api';
+import api from '../../services/api';
 
 export default {
   name: 'ChiTietLichTrinh',
@@ -592,20 +589,16 @@ export default {
       this.loading = true;
       try {
         // Lấy chi tiết chuyến đi
-        const res = await fetch(`${BASE}/chuyen-dis/${this.tripId}`, {
-          headers: { Authorization: `Bearer ${this.token}` }
-        });
-        const json = await res.json();
+        const res = await api.get(`/chuyen-dis/${this.tripId}`);
+        const json = res.data;
         
         if (json.status === 'success' && json.data) {
           this.trip = json.data;
           if(!this.trip.so_ngay) this.trip.so_ngay = 1;
 
           // Lấy danh sách địa điểm theo chuyến đi
-          const res2 = await fetch(`${BASE}/chuyen-di/${this.tripId}/dia-diems`, {
-            headers: { Authorization: `Bearer ${this.token}` }
-          });
-          const json2 = await res2.json();
+          const res2 = await api.get(`/chuyen-di/${this.tripId}/dia-diems`);
+          const json2 = res2.data;
           this.rawPlaces = json2.data || [];
 
           // Parse vào lịch trình theo ngày
@@ -650,10 +643,8 @@ export default {
     async fetchExpenses() {
       this.loadingExpenses = true;
       try {
-        const res = await fetch(`${BASE}/chuyen-dis/${this.tripId}/chi-phis`, {
-          headers: { 'Authorization': `Bearer ${this.token}` }
-        });
-        const json = await res.json();
+        const res = await api.get(`/chuyen-dis/${this.tripId}/chi-phis`);
+        const json = res.data;
         if (json.status === 'success') {
           this.incurredExpenses = json.data || [];
         }
@@ -684,8 +675,6 @@ export default {
       
       this.submittingExpense = true;
       const isEdit = !!this.expenseForm.id;
-      const url = isEdit ? `${BASE}/chi-phi-phat-sinhs/${this.expenseForm.id}` : `${BASE}/chi-phi-phat-sinhs`;
-      const method = isEdit ? 'PUT' : 'POST';
 
       // Chuyển đổi kiểu dữ liệu đúng để tránh lỗi validation
       const clientId = parseInt(localStorage.getItem('client_id')) || null;
@@ -699,15 +688,10 @@ export default {
       };
 
       try {
-        const res = await fetch(url, {
-          method: method,
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.token}`
-          },
-          body: JSON.stringify(payload)
-        });
-        const json = await res.json();
+        const res = isEdit
+          ? await api.put(`/chi-phi-phat-sinhs/${this.expenseForm.id}`, payload)
+          : await api.post('/chi-phi-phat-sinhs', payload);
+        const json = res.data;
         if (json.status === 'success') {
           this.$toast.success(isEdit ? "Cập nhật chi phí thành công!" : "Thêm chi phí thành công!");
           this.showExpenseModal = false;
@@ -719,6 +703,13 @@ export default {
           console.error('Validation errors:', json);
         }
       } catch (e) {
+        const json = e.response?.data;
+        if (json) {
+          const errMsg = json.errors ? Object.values(json.errors).flat().join(', ') : (json.message || "Lỗi lưu chi phí");
+          this.$toast.error(errMsg);
+          console.error('Validation errors:', json);
+          return;
+        }
         this.$toast.error("Lỗi kết nối đến máy chủ.");
         console.error(e);
       } finally {
@@ -729,11 +720,8 @@ export default {
     async deleteExpense(id) {
       if (!confirm("Bạn có chắc muốn xóa chi phí này?")) return;
       try {
-        const res = await fetch(`${BASE}/chi-phi-phat-sinhs/${id}`, {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${this.token}` }
-        });
-        const json = await res.json();
+        const res = await api.delete(`/chi-phi-phat-sinhs/${id}`);
+        const json = res.data;
         if (json.status === 'success') {
           this.$toast.success("Xóa thành công");
           await this.fetchExpenses();
@@ -760,7 +748,7 @@ export default {
     getFullAvatar(avatar) {
       if (!avatar) return '';
       if (avatar.startsWith('http')) return avatar;
-      return `http://localhost:8000/storage/${avatar}`;
+      return `${(import.meta.env.VITE_BACKEND_URL || '').replace(/\/+$/, '')}/storage/${avatar}`;
     },
 
     buildSchedule() {
@@ -852,11 +840,8 @@ export default {
     // ─── Modal & Chia sẻ ────────────────────────────────
     async finalizeTrip() {
         try {
-            const res = await fetch(`${BASE}/client/chuyen-di/${this.tripId}/chot-lich-trinh`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${this.token}` }
-            });
-            const data = await res.json();
+            const res = await api.post(`/client/chuyen-di/${this.tripId}/chot-lich-trinh`);
+            const data = res.data;
             if (data.status) {
                 this.$toast.success('Đã chốt lịch trình thành công!');
                 this.trip.trang_thai = 2; // update local state
@@ -873,11 +858,8 @@ export default {
 
     async unfinalizeTrip() {
         try {
-            const res = await fetch(`${BASE}/client/chuyen-di/${this.tripId}/mo-lich-trinh`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${this.token}` }
-            });
-            const data = await res.json();
+            const res = await api.post(`/client/chuyen-di/${this.tripId}/mo-lich-trinh`);
+            const data = res.data;
             if (data.status) {
                 this.$toast.success('Đã mở lại lịch trình. Các thành viên có thể tiếp tục chỉnh sửa.');
                 this.trip.trang_thai = 1; // update local state
@@ -899,14 +881,8 @@ export default {
       this.$toast.info('AI đang phân tích và tối ưu lại lịch trình của bạn...');
 
       try {
-        const res = await fetch(`${BASE}/client/ai/reorder-itinerary/${this.tripId}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.token}`
-          }
-        });
-        const json = await res.json();
+        const res = await api.post(`/client/ai/reorder-itinerary/${this.tripId}`);
+        const json = res.data;
         if (json.status === 'success') {
           this.$toast.success('AI đã tối ưu lại lịch trình thành công!');
           await this.fetchTripData(); // Reload UI
@@ -931,14 +907,8 @@ export default {
             const originalHTML = btn ? btn.innerHTML : '';
             if(btn && btn.tagName === 'BUTTON') btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
             
-            const res = await fetch(`${BASE}/lich-trinh-dia-diems/${item.id}/swap`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.token}`
-                }
-            });
-            const json = await res.json();
+            const res = await api.post(`/lich-trinh-dia-diems/${item.id}/swap`);
+            const json = res.data;
             if (json.status) {
                 this.$toast.success('Đã thay đổi địa điểm mới!');
                 await this.fetchTripData(); // Tải lại chuyến đi
@@ -954,11 +924,11 @@ export default {
     async fetchMyGroups() {
       try {
         const [joinedRes, ownedRes] = await Promise.all([
-          fetch(`${BASE}/client/nhom-du-lich/get-joined`, { headers: { Authorization: `Bearer ${this.token}` } }),
-          fetch(`${BASE}/client/nhom-du-lich/get-my-groups`, { headers: { Authorization: `Bearer ${this.token}` } })
+          api.get('/client/nhom-du-lich/get-joined'),
+          api.get('/client/nhom-du-lich/get-my-groups')
         ]);
-        const jData = await joinedRes.json();
-        const oData = await ownedRes.json();
+        const jData = joinedRes.data;
+        const oData = ownedRes.data;
         
         const groups = [];
         if (jData.status && jData.data) groups.push(...jData.data);
@@ -980,15 +950,7 @@ export default {
             message: JSON.stringify({ type: 'itinerary', id: this.tripId, title: this.trip.ten_chuyen_di })
         };
 
-        const r = await fetch(`${BASE}/nhom-chats`, {
-          method: 'POST', 
-          headers: { 
-            'Content-Type': 'application/json', 
-            Authorization: `Bearer ${this.token}` 
-          },
-          body: JSON.stringify(payload)
-        });
-        const res = await r.json();
+        const { data: res } = await api.post('/nhom-chats', payload);
         
         if (res.status) {
           this.$toast.success('Gửi lịch trình thành công!');
@@ -1001,129 +963,6 @@ export default {
         console.error(e);
       } finally {
         this.sendingShare = false;
-      }
-    },
-
-    exportExcel() {
-      const loadXlsxAndExport = () => {
-        const XLSX = window.XLSX;
-        if (!XLSX) return;
-
-        const wb = XLSX.utils.book_new();
-
-        // 1. Sheet Tổng quan: Chi tiết hơn về chuyến đi
-        const overviewData = [
-          ["THÔNG TIN TỔNG QUAN CHUYẾN ĐI"],
-          [""],
-          ["Tên chuyến đi", this.trip?.ten_chuyen_di || ""],
-          ["Mô tả", this.trip?.mo_ta || "Không có mô tả"],
-          ["Ngày bắt đầu", this.formatDateFull(this.trip?.ngay_bat_dau)],
-          ["Thời lượng", this.formatDuration(this.trip?.so_ngay)],
-          ["Số lượng thành viên", (this.trip?.so_nguoi || 1) + " người"],
-          ["Ngân sách dự kiến", this.trip?.ngan_sach ? this.formatCurrency(this.trip.ngan_sach) : "Không giới hạn"],
-          ["Tổng chi phí thực tế (Dự kiến)", this.formatCurrency(this.tongChiPhiDuKien)],
-          [""],
-          ["DANH SÁCH THÀNH VIÊN NHÓM"]
-        ];
-
-        // Thêm danh sách thành viên nếu có
-        if (this.trip?.thanh_viens && this.trip.thanh_viens.length > 0) {
-          this.trip.thanh_viens.forEach((m, i) => {
-            overviewData.push([`Thành viên ${i+1}`, m.name || m.email || "N/A", m.pivot?.vai_tro === 'truong_nhom' ? "(Trưởng nhóm)" : ""]);
-          });
-        } else {
-          overviewData.push(["Chưa có danh sách thành viên cụ thể"]);
-        }
-
-        const overviewWs = XLSX.utils.aoa_to_sheet(overviewData);
-        overviewWs['!cols'] = [{ wch: 25 }, { wch: 40 }, { wch: 15 }]; // Độ rộng cột
-        XLSX.utils.book_append_sheet(wb, overviewWs, "Tổng quan");
-
-        // 2. Sheet Lịch trình: Chi tiết từng địa điểm, địa chỉ, ghi chú và tips
-        const itineraryData = [
-          ["CHI TIẾT LỊCH TRÌNH THEO NGÀY"],
-          [""],
-          ["Ngày", "Thời gian", "Tên địa điểm", "Địa chỉ", "Vị trí (Kinh độ, Vĩ độ)", "Thời tiết dự kiến", "Hoạt động", "Giá vé (VND)", "Thành tiền (VND)", "Ghi chú/Mô tả", "AI Travel Tips (Lời khuyên)"]
-        ];
-
-        this.lichTrinhTheoNgay.forEach((day, index) => {
-          const dateLabel = this.formatDateDate(this.trip?.ngay_bat_dau, index);
-          itineraryData.push([`--- NGÀY ${index + 1} (${dateLabel}) ---`]);
-          
-          day.forEach((item) => {
-            const price = Number(item.gia_ve) || 0;
-            const total = price * (this.trip?.so_nguoi || 1);
-            const coordinates = (item.kinh_do && item.vi_do) ? `${item.kinh_do}, ${item.vi_do}` : (item.dia_diem?.kinh_do ? `${item.dia_diem.kinh_do}, ${item.dia_diem.vi_do}` : 'N/A');
-            
-            itineraryData.push([
-              `Ngày ${index + 1}`,
-              `${item.gio_bat_dau || ''} - ${item.gio_ket_thuc || ''}`,
-              item.ten_dia_diem || item.dia_diem?.ten_dia_diem || 'N/A',
-              item.dia_diem?.dia_chi || 'N/A',
-              coordinates,
-              "Nắng nhẹ/Mây rải rác", // Giá trị mặc định hoặc từ data nếu có
-              item.loai_hoat_dong || 'Tham quan',
-              this.formatCurrency(price),
-              this.formatCurrency(total),
-              item.ghi_chu || '',
-              item.travel_tips || ''
-            ]);
-          });
-          itineraryData.push([]); // Dòng trống giữa các ngày
-        });
-
-        const itineraryWs = XLSX.utils.aoa_to_sheet(itineraryData);
-        itineraryWs['!cols'] = [
-          { wch: 15 }, { wch: 15 }, { wch: 25 }, { wch: 35 }, 
-          { wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 30 }, { wch: 45 }
-        ];
-        XLSX.utils.book_append_sheet(wb, itineraryWs, "Lịch trình chi tiết");
-
-        // 3. Sheet Chi phí phát sinh: Đầy đủ các khoản thu chi
-        const expenseData = [
-          ["DANH SÁCH CHI PHÍ PHÁT SINH TRONG CHUYẾN ĐI"],
-          [""],
-          ["Ngày chi", "Hạng mục", "Số tiền (VND)", "Người chi", "Ghi chú"]
-        ];
-
-        if (this.expenses && this.expenses.length > 0) {
-          this.expenses.forEach(exp => {
-            expenseData.push([
-              this.formatExpenseDate(exp.ngay_chi),
-              exp.hang_muc,
-              this.formatCurrency(exp.so_tien),
-              exp.user?.name || 'Thành viên',
-              exp.ghi_chu || ''
-            ]);
-          });
-          
-          // Thêm dòng tổng cộng
-          const totalExp = this.expenses.reduce((sum, e) => sum + Number(e.so_tien), 0);
-          expenseData.push([]);
-          expenseData.push(["", "TỔNG CỘNG PHÁT SINH:", this.formatCurrency(totalExp)]);
-        } else {
-          expenseData.push(["Chưa có khoản chi phí phát sinh nào được ghi nhận"]);
-        }
-
-        const expenseWs = XLSX.utils.aoa_to_sheet(expenseData);
-        expenseWs['!cols'] = [{ wch: 15 }, { wch: 20 }, { wch: 15 }, { wch: 20 }, { wch: 40 }];
-        XLSX.utils.book_append_sheet(wb, expenseWs, "Chi phí phát sinh");
-
-        // Xuất file với tên chuẩn hóa
-        const rawName = this.trip?.ten_chuyen_di || 'Chuyen-Di-Cua-Toi';
-        const safeName = rawName.replace(/[/\\?%*:|"<>]/g, '-');
-        XLSX.writeFile(wb, `Lich-Trinh-Chi-Tiet-${safeName}.xlsx`);
-        this.$toast.success('Đã xuất file Excel chi tiết thành công!');
-      };
-
-      if (!window.XLSX) {
-        this.$toast.info('Đang tải thư viện xuất Excel...', { timeout: 2000 });
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
-        script.onload = () => loadXlsxAndExport();
-        document.head.appendChild(script);
-      } else {
-        loadXlsxAndExport();
       }
     },
 
@@ -1181,16 +1020,9 @@ export default {
       if (!this.selectedRating) return;
       this.submittingRating = true;
       try {
-        await fetch(`${BASE}/client/danh-gia-he-thong`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.token}`
-          },
-          body: JSON.stringify({
-            muc_do_hai_long: this.selectedRating,
-            dong_gop: this.ratingFeedback
-          })
+        await api.post('/client/danh-gia-he-thong', {
+          muc_do_hai_long: this.selectedRating,
+          dong_gop: this.ratingFeedback
         });
         this.$toast.success('Cảm ơn bạn đã để lại đánh giá!');
       } catch (err) {
@@ -1380,14 +1212,7 @@ export default {
 
           try {
               this.$toast.info('Đang cập nhật thứ tự...');
-              await fetch(`${BASE}/lich-trinh-dia-diems/reorder`, {
-                  method: 'POST',
-                  headers: {
-                      'Content-Type': 'application/json',
-                      'Authorization': `Bearer ${this.token}`
-                  },
-                  body: JSON.stringify({ items: apiPayload })
-              });
+              await api.post('/lich-trinh-dia-diems/reorder', { items: apiPayload });
               
               // AI tối ưu lại sau khi di chuyển
               this.$toast.info('AI đang tối ưu lại lịch trình chuyên sâu...');

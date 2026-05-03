@@ -132,7 +132,7 @@
 </template>
 
 <script>
-import api from '../../config/api';
+import api from '../../services/api';
 
 export default {
   name: 'QuanLyDanhGia',
@@ -181,8 +181,7 @@ export default {
     async fetchReviews() {
       this.isLoading = true;
       try {
-        const response = await fetch(`${api.BASE}/danh-gias`);
-        const json = await response.json();
+        const { data: json } = await api.get('/danh-gias');
         if (json.status === 'success' && json.data) {
           this.allReviews = json.data;
         }
@@ -195,12 +194,7 @@ export default {
     },
     async approveReview(id) {
       try {
-        const res = await fetch(`${api.BASE}/danh-gias/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ trang_thai: 1 })
-        });
-        const json = await res.json();
+        const { data: json } = await api.put(`/danh-gias/${id}`, { trang_thai: 1 });
         if (json.status === 'success') {
           const idx = this.allReviews.findIndex(r => r.id === id);
           if (idx !== -1) {
@@ -217,12 +211,7 @@ export default {
     },
     async hideReview(id) {
       try {
-        const res = await fetch(`${api.BASE}/danh-gias/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ trang_thai: 0 })
-        });
-        const json = await res.json();
+        const { data: json } = await api.put(`/danh-gias/${id}`, { trang_thai: 0 });
         if (json.status === 'success') {
           const idx = this.allReviews.findIndex(r => r.id === id);
           if (idx !== -1) {
@@ -242,10 +231,7 @@ export default {
         return;
       }
       try {
-        const res = await fetch(`${api.BASE}/danh-gias/${id}`, {
-          method: 'DELETE'
-        });
-        const json = await res.json();
+        const { data: json } = await api.delete(`/danh-gias/${id}`);
         if (json.status === 'success') {
           this.allReviews = this.allReviews.filter(r => r.id !== id);
           if (this.$toast) this.$toast.success('Đã xoá đánh giá thành công.');

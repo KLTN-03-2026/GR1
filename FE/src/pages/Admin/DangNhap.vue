@@ -81,7 +81,7 @@
 </template>
 
 <script>
-import axios from 'axios'
+import api from '../../services/api.js';
 
 export default {
     data() {
@@ -115,7 +115,7 @@ export default {
             if (!this.validateAdmin()) return;
 
             this.loading = true;
-            axios.post('http://127.0.0.1:8000/api/admin/dang-nhap', this.thong_tin_dang_nhap)
+            api.post('/admin/dang-nhap', this.thong_tin_dang_nhap)
                 .then((res) => {
                     if (res.data.status) {
                         const adminData = res.data.data || {};

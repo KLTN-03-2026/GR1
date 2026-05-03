@@ -206,9 +206,9 @@
 </template>
 
 <script>
-import axios from 'axios'
+import api from '../../services/api.js';
 
-const API = 'http://127.0.0.1:8000/api/client'
+const API = '/client'
 const PROFILE_UPDATED_EVENT = 'client-profile-updated'
 
 export default {
@@ -280,13 +280,13 @@ export default {
         return path
       }
       const cleanPath = path.startsWith('/') ? path : `/${path}`
-      return `http://127.0.0.1:8000${cleanPath}`
+      return `${(import.meta.env.VITE_BACKEND_URL || '').replace(/\/+$/, '')}${cleanPath}`
     },
     async fetchProfile() {
       this.loading = true
       try {
         const userId = localStorage.getItem('client_id')
-        const res = await axios.get(`${API}/profile/${userId}`, this.authHeader())
+        const res = await api.get(`${API}/profile/${userId}`, this.authHeader())
         if (res.data.status === 'success' || res.data.status === true) {
           this.user = res.data.data || {}
           if (res.data.stats) {
@@ -324,7 +324,7 @@ export default {
       if (!this.validateEdit()) return
       this.savingInfo = true
       try {
-        const res = await axios.post(`${API}/cap-nhat-thong-tin`, this.editForm, this.authHeader())
+        const res = await api.post(`${API}/cap-nhat-thong-tin`, this.editForm, this.authHeader())
         if (res.data.status) {
           localStorage.setItem('client_ten', this.editForm.ten)
           this.user = { ...this.user, ...this.editForm }
@@ -402,10 +402,9 @@ export default {
         const formData = new FormData()
         formData.append('anh_dai_dien', this.avatarFile)
 
-        const res = await axios.post(`${API}/cap-nhat-anh-dai-dien`, formData, {
+        const res = await api.post(`${API}/cap-nhat-anh-dai-dien`, formData, {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('client_token')}`,
-            'Content-Type': 'multipart/form-data',
           },
         })
 
@@ -480,7 +479,7 @@ export default {
           mat_khau_moi: this.pwForm.new,
         }
 
-        const res = await axios.post(`${API}/doi-mat-khau`, payload, this.authHeader())
+        const res = await api.post(`${API}/doi-mat-khau`, payload, this.authHeader())
 
         if (res.data.status) {
           if (res.data.message) {

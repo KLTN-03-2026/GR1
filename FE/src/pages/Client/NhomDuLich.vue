@@ -334,11 +334,8 @@ import { useToast } from 'vue-toast-notification';
 import GroupInviteModal from '../../components/group/GroupInviteModal.vue';
 import GroupInvitesModal from '../../components/group/GroupInvitesModal.vue';
 import { useGroupInvites } from '../../composables/useGroupInvites';
-import { CLIENT_API_BASE_URL } from '../../services/clientApi';
+import api from '../../services/api';
 import { getClientAccessToken } from '../../utils/clientAuth';
-
-const BASE = `${CLIENT_API_BASE_URL}/client/nhom-du-lich`;
-const BASE_CD = `${CLIENT_API_BASE_URL}/client/chuyen-di`;
 
 export default {
   name: 'NhomDuLich',
@@ -421,7 +418,7 @@ export default {
         return path;
       }
       const cleanPath = path.startsWith('/') ? path : `/${path}`;
-      return `http://127.0.0.1:8000${cleanPath}`;
+      return `${(import.meta.env.VITE_BACKEND_URL || '').replace(/\/+$/, '')}${cleanPath}`;
     },
 
     h() {
@@ -467,8 +464,8 @@ export default {
       if (!currentUserId || !group.id) return null;
 
       try {
-        const response = await fetch(`${BASE}/members/${group.id}`, { headers: this.h() });
-        const json = await response.json();
+        const response = await api.get(`/client/nhom-du-lich/members/${group.id}`);
+        const json = response.data;
         const members = Array.isArray(json?.data) ? json.data : [];
         const me = members.find((item) => Number(item?.id_nguoi_dung) === currentUserId);
         return me?.id_thanh_vien ?? me?.id_chi_tiet_nhom ?? null;
@@ -501,30 +498,30 @@ export default {
 
     async fetchJoined() {
       try {
-        const r = await fetch(`${BASE}/get-joined`, { headers: this.h() });
-        this.joinedGroups = (await r.json()).data || [];
+        const r = await api.get('/client/nhom-du-lich/get-joined');
+        this.joinedGroups = r.data.data || [];
       } catch { this.joinedGroups = []; }
     },
 
     async fetchMine() {
       try {
-        const r = await fetch(`${BASE}/get-my-groups`, { headers: this.h() });
-        this.myGroups = (await r.json()).data || [];
+        const r = await api.get('/client/nhom-du-lich/get-my-groups');
+        this.myGroups = r.data.data || [];
       } catch { this.myGroups = []; }
     },
 
     async fetchMyTrips() {
       try {
-        const r = await fetch(`${BASE_CD}/get-data`, { headers: this.h() });
-        this.myTrips = (await r.json()).data || [];
+        const r = await api.get('/client/chuyen-di/get-data');
+        this.myTrips = r.data.data || [];
       } catch { this.myTrips = []; }
     },
 
     async fetchMembers(id) {
       this.loadingMembers = true;
       try {
-        const r = await fetch(`${BASE}/members/${id}`, { headers: this.h() });
-        this.members = (await r.json()).data || [];
+        const r = await api.get(`/client/nhom-du-lich/members/${id}`);
+        this.members = r.data.data || [];
       } catch { this.members = []; }
       this.loadingMembers = false;
     },
@@ -554,16 +551,15 @@ export default {
       }
       this.creating = true;
       try {
-        const r = await fetch(`${BASE}/create`, {
-          method: 'POST', headers: this.hJson(),
-          body: JSON.stringify(this.createForm),
+        const r = await api.post('/client/nhom-du-lich/create', this.createForm, {
+          validateStatus: () => true,
         });
         if (r.status === 401) {
           this.createMsg = 'Phiên làm việc hết hạn. Vui lòng đăng nhập lại.';
           this.createMsgType = 'error';
           return;
         }
-        const j = await r.json();
+        const j = r.data;
         this.createMsg = j.message;
         this.createMsgType = j.status ? 'success' : 'error';
         if (j.status) {
@@ -630,11 +626,11 @@ export default {
 
     async doKick() {
       this.kicking = true;
-      const r = await fetch(`${BASE}/remove-member`, {
-        method: 'POST', headers: this.hJson(),
-        body: JSON.stringify({ id_nhom: this.panelGroup.id, id_nguoi_dung: this.kickTarget.id_nguoi_dung }),
+      const r = await api.post('/client/nhom-du-lich/remove-member', {
+        id_nhom: this.panelGroup.id,
+        id_nguoi_dung: this.kickTarget.id_nguoi_dung
       });
-      const j = await r.json();
+      const j = r.data;
       if (j.status) {
         this.kickTarget = null;
         await this.fetchMembers(this.panelGroup.id);
@@ -668,11 +664,10 @@ export default {
 
     async doLeave() {
       this.leaving = true;
-      const r = await fetch(`${BASE}/leave`, {
-        method: 'POST', headers: this.hJson(),
-        body: JSON.stringify({ id_nhom: this.leaveTarget.id }),
+      const r = await api.post('/client/nhom-du-lich/leave', {
+        id_nhom: this.leaveTarget.id
       });
-      const j = await r.json();
+      const j = r.data;
       if (j.status) {
         this.leaveTarget = null;
         await this.fetchJoined();
@@ -685,11 +680,10 @@ export default {
 
     async doDissolve() {
       this.dissolving = true;
-      const r = await fetch(`${BASE}/delete`, {
-        method: 'POST', headers: this.hJson(),
-        body: JSON.stringify({ id: this.dissolveTarget.id }),
+      const r = await api.post('/client/nhom-du-lich/delete', {
+        id: this.dissolveTarget.id
       });
-      const j = await r.json();
+      const j = r.data;
       if (j.status) {
         this.dissolveTarget = null;
         await this.fetchAll();

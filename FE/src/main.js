@@ -2,10 +2,10 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
 import './style.css'
-import axios from 'axios'
+import api from './services/api.js';
 
 // Global Axios Interceptor for Laravel 422 Errors
-axios.interceptors.response.use(
+api.interceptors.response.use(
     (response) => {
         return response;
     },

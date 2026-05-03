@@ -235,9 +235,20 @@ class NguoiDungController extends Controller
         ], 200);
     }
 
-    public function getData()
+    public function getData(Request $request)
     {
-        $nguoiDungs = NguoiDung::all();
+        $limit = $request->query('limit', 10);
+        
+        $query = NguoiDung::query();
+        
+        if ($request->has('search')) {
+            $search = $request->query('search');
+            $query->where('ten', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%")
+                  ->orWhere('so_dien_thoai', 'like', "%{$search}%");
+        }
+        
+        $nguoiDungs = $query->orderBy('created_at', 'desc')->get();
 
         return response()->json([
             'status'  => 'success',
@@ -246,14 +257,46 @@ class NguoiDungController extends Controller
         ], 200);
     }
 
+    public function toggleStatus($id)
+    {
+        $nguoiDung = NguoiDung::find($id);
+
+        if (!$nguoiDung) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Không tìm thấy người dùng.',
+            ], 404);
+        }
+
+        // Toggle trạng thái is_active
+        $nguoiDung->is_active = $nguoiDung->is_active == 1 ? 0 : 1;
+        $nguoiDung->save();
+
+        $message = $nguoiDung->is_active == 1 ? 'Đã kích hoạt người dùng.' : 'Đã khóa người dùng.';
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => $message,
+        ], 200);
+    }
+
     public function create(StoreNguoiDungRequest $request)
     {
+        $anhDaiDien = null;
+        if ($request->hasFile('anh_dai_dien')) {
+            $file = $request->file('anh_dai_dien');
+            $storePath = $file->storeAs('avatar-client', time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension(), 'public');
+            $anhDaiDien = '/storage/' . $storePath;
+        } else {
+            $anhDaiDien = $request->anh_dai_dien;
+        }
+
         $nguoiDung = NguoiDung::create([
             'ten'           => $request->ho_va_ten,
             'email'         => strtolower($request->email),
             'mat_khau'      => Hash::make($request->password),
             'so_dien_thoai' => $request->so_dien_thoai,
-            'anh_dai_dien'  => $request->anh_dai_dien,
+            'anh_dai_dien'  => $anhDaiDien,
             'is_active'     => 1,
         ]);
 
@@ -401,7 +444,14 @@ class NguoiDungController extends Controller
 
         $nguoiDung->ten = $request->ho_va_ten;
         $nguoiDung->so_dien_thoai = $request->so_dien_thoai;
-        $nguoiDung->anh_dai_dien = $request->anh_dai_dien;
+        
+        if ($request->hasFile('anh_dai_dien')) {
+            $file = $request->file('anh_dai_dien');
+            $storePath = $file->storeAs('avatar-client', time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension(), 'public');
+            $nguoiDung->anh_dai_dien = '/storage/' . $storePath;
+        } elseif ($request->has('anh_dai_dien')) {
+            $nguoiDung->anh_dai_dien = $request->anh_dai_dien;
+        }
 
         if ($request->filled('password')) {
             $nguoiDung->mat_khau = Hash::make($request->password);
@@ -413,10 +463,11 @@ class NguoiDungController extends Controller
             'status'  => true,
             'message' => 'Cập nhật tài khoản người dùng thành công.',
             'data'    => [
-                'id' => $nguoiDung->id,
-                'ho_va_ten' => $nguoiDung->ten,
+                'id'            => $nguoiDung->id,
+                'ho_va_ten'     => $nguoiDung->ten,
+                'ten'           => $nguoiDung->ten,
                 'so_dien_thoai' => $nguoiDung->so_dien_thoai,
-                'anh_dai_dien' => $nguoiDung->anh_dai_dien,
+                'anh_dai_dien'  => $nguoiDung->anh_dai_dien,
             ],
         ], 200);
     }

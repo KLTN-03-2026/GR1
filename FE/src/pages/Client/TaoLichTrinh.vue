@@ -505,7 +505,7 @@
 </template>
 
 <script>
-const BASE = 'http://localhost:8000/api';
+import api from '../../services/api.js';
 
 export default {
   name: 'TaoLichTrinh',
@@ -689,11 +689,11 @@ export default {
       if (!token) return;
       try {
         const [joinedRes, ownedRes] = await Promise.all([
-          fetch(`${BASE}/client/nhom-du-lich/get-joined`, { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${BASE}/client/nhom-du-lich/get-my-groups`, { headers: { Authorization: `Bearer ${token}` } })
+          api.get('/client/nhom-du-lich/get-joined'),
+          api.get('/client/nhom-du-lich/get-my-groups')
         ]);
-        const jData = await joinedRes.json();
-        const oData = await ownedRes.json();
+        const jData = joinedRes.data;
+        const oData = ownedRes.data;
         
         const groups = [];
         if (jData.status && jData.data) groups.push(...jData.data);
@@ -806,8 +806,8 @@ export default {
     async fetchDiaDiem() {
       this.loadingDiaDiem = true;
       try {
-        const res = await fetch(`${BASE}/dia-diems/`);
-        const json = await res.json();
+        const res = await api.get('/dia-diems/');
+        const json = res.data;
 
         this.allDiaDiem = (json.data || []).map(d => ({
           ...d,
@@ -953,8 +953,8 @@ export default {
           + `&hourly=temperature_2m,weathercode`
           + `&timezone=Asia%2FHo_Chi_Minh`
           + `&start_date=${this.form.ngay_bat_dau}&end_date=${this.form.ngay_ket_thuc}`;
-        const res = await fetch(url);
-        const json = await res.json();
+        const res = await api.get(url);
+        const json = res.data;
         if (!json.daily) return { daily: [], hourly: {} };
 
         // WMO Weather Code → condition
@@ -1040,14 +1040,9 @@ export default {
           weather_data: weatherData,  // ← Gửi kèm thời tiết cho AI
         };
 
-        const res = await fetch(`${BASE}/client/ai/generate-itinerary`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(payload)
+        const res = await api.post('/client/ai/generate-itinerary', payload, {
+          headers: { Accept: 'application/json' },
+          validateStatus: () => true,
         });
 
         if (res.status === 401) {
@@ -1059,10 +1054,8 @@ export default {
           return;
         }
 
-        let json;
-        try {
-          json = await res.json();
-        } catch (err) {
+        const json = res.data;
+        if (!json || typeof json !== 'object') {
           throw new Error('Lỗi từ máy chủ: Không thể đọc dữ liệu trả về.');
         }
 
@@ -1194,12 +1187,8 @@ export default {
       try {
         // 1. Tạo chuyến đi
         const payload = { ...this.form, id_nhom_du_lich: this.form.id_nhom_du_lich?.id || null };
-        const r1 = await fetch(`${BASE}/client/chuyen-di/create`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify(payload),
-        });
-        const j1 = await r1.json();
+        const r1 = await api.post('/client/chuyen-di/create', payload);
+        const j1 = r1.data;
         if (!j1.status) throw new Error(j1.message || 'Lỗi tạo chuyến đi');
 
         const newTripId = j1.data?.id;
@@ -1217,12 +1206,11 @@ export default {
           }))
         );
 
-        const r3 = await fetch(`${BASE}/client/chi-tiet-chuyen-di/bulk-create`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ id_chuyen_di: newTripId, items }),
+        const r3 = await api.post('/client/chi-tiet-chuyen-di/bulk-create', {
+          id_chuyen_di: newTripId,
+          items
         });
-        const j3 = await r3.json();
+        const j3 = r3.data;
         if (!j3.status) throw new Error(j3.message || 'Lỗi lưu chi tiết');
 
         this.saveSuccess = true;
@@ -1266,11 +1254,7 @@ export default {
                id_chi_tiet_nhom: group.id_chi_tiet_nhom,
                message: JSON.stringify({ type: 'itinerary', id: tripId, title: this.form.ten_chuyen_di })
            };
-           await fetch(`${BASE}/nhom-chats`, {
-               method: 'POST', 
-               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('client_token')}` },
-               body: JSON.stringify(payload)
-           });
+           await api.post('/nhom-chats', payload);
        } catch (e) {
            console.error('Lỗi khi chia sẻ.', e);
        }
@@ -1377,18 +1361,10 @@ export default {
       this.submittingRating = true;
 
       try {
-        const token = localStorage.getItem('client_token');
         // Attempt to save rating to backend (non-blocking – ignore errors gracefully)
-        await fetch(`${BASE}/client/danh-gia-he-thong`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({
-            muc_do_hai_long: this.selectedRating,
-            noi_dung: this.ratingFeedback,
-          }),
+        await api.post('/client/danh-gia-he-thong', {
+          muc_do_hai_long: this.selectedRating,
+          noi_dung: this.ratingFeedback,
         }).catch(() => { }); // Silently ignore if endpoint doesn't exist yet
       } finally {
         this.submittingRating = false;

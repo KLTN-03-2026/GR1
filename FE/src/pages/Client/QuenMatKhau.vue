@@ -152,9 +152,9 @@
 </template>
 
 <script>
-import axios from 'axios';
+import api from '../../services/api.js';
 
-const API_URL = 'http://127.0.0.1:8000/api/client/quen-mat-khau';
+const API_URL = '/client/quen-mat-khau';
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default {
@@ -228,7 +228,7 @@ export default {
                     email: this.form.email.trim().toLowerCase(),
                 };
 
-                const res = await axios.post(API_URL, payload);
+                const res = await api.post(API_URL, payload);
                 if (!res.data?.status) {
                     this.status = 'error';
                     this.$toast.error(res.data?.message || 'Tài khoản chưa được đăng ký.');

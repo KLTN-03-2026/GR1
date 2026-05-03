@@ -296,10 +296,10 @@
 </template>
 
 <script>
-import axios from 'axios'
+import api from '../../../services/api.js';
 import * as bootstrap from 'bootstrap'
 
-const API_URL = 'http://127.0.0.1:8000/api/dia-diems';
+const API_URL = '/dia-diems';
 
 export default {
   name: 'LocationManager',
@@ -373,7 +373,7 @@ export default {
     },
     async fetchCategories() {
       try {
-        const res = await axios.get('http://127.0.0.1:8000/api/danh-mucs', this.authHeader());
+        const res = await api.get('/danh-mucs', this.authHeader());
         this.categories = res.data.data || [];
       } catch (error) {
         console.error("Lỗi khi tải danh mục:", error);
@@ -384,7 +384,7 @@ export default {
       this.errorMessage = ''
 
       try {
-        const res = await axios.get(this.fetchUrl, this.authHeader())
+        const res = await api.get(this.fetchUrl, this.authHeader())
         this.places = Array.isArray(res.data.data) ? res.data.data : []
       } catch (error) {
         this.places = []
@@ -434,7 +434,7 @@ export default {
       if (!this.selectedPlaceForImages) return;
       this.loadingImages = true;
       try {
-        const res = await axios.get(`http://127.0.0.1:8000/api/hinh-anh-dia-diems/dia-diem/${this.selectedPlaceForImages.id}`, this.authHeader());
+        const res = await api.get(`/hinh-anh-dia-diems/dia-diem/${this.selectedPlaceForImages.id}`, this.authHeader());
         this.placeImages = res.data.data;
       } catch (e) {
         this.$toast.error('Không thể tải hình ảnh.');
@@ -446,7 +446,7 @@ export default {
       if (!this.newImageUrl) return;
       this.addingImage = true;
       try {
-        await axios.post('http://127.0.0.1:8000/api/hinh-anh-dia-diems', {
+        await api.post('/hinh-anh-dia-diems', {
           id_dia_diem: this.selectedPlaceForImages.id,
           duong_dan_anh: this.newImageUrl,
           is_main: this.placeImages.length === 0, // Nếu chưa có ảnh nào thì tự động thành ảnh chính
@@ -464,7 +464,7 @@ export default {
     },
     async setMainImage(img) {
       try {
-        await axios.post(`http://127.0.0.1:8000/api/hinh-anh-dia-diems/${img.id}/set-main`, {}, this.authHeader());
+        await api.post(`/hinh-anh-dia-diems/${img.id}/set-main`, {}, this.authHeader());
         this.$toast.success('Đã thay đổi ảnh chính thành công!');
         await this.fetchImages();
         // Cập nhật thủ công ảnh thumbnail ngoài danh sách
@@ -477,7 +477,7 @@ export default {
     async deleteImage(img) {
       if (!confirm('Bạn có chắc chắn muốn xóa ảnh này không?')) return;
       try {
-        await axios.delete(`http://127.0.0.1:8000/api/hinh-anh-dia-diems/${img.id}`, this.authHeader());
+        await api.delete(`/hinh-anh-dia-diems/${img.id}`, this.authHeader());
         this.$toast.success('Đã xóa ảnh.');
         await this.fetchImages();
         // Nếu vừa xóa ảnh chính và còn ảnh khác, thì load lại danh sách ngoài kia
@@ -503,9 +503,9 @@ export default {
 
       try {
         if (this.isEditing) {
-          await axios.put(`${API_URL}/${this.form.id}`, payload, this.authHeader());
+          await api.put(`${API_URL}/${this.form.id}`, payload, this.authHeader());
         } else {
-          await axios.post(API_URL, payload, this.authHeader());
+          await api.post(API_URL, payload, this.authHeader());
         }
         await this.fetchPlaces();
         this.modalInstance.hide();
@@ -572,7 +572,7 @@ export default {
     async confirmDelete() {
       if (!this.selectedPlace) return;
       try {
-        await axios.delete(`${API_URL}/${this.selectedPlace.id}`, this.authHeader());
+        await api.delete(`${API_URL}/${this.selectedPlace.id}`, this.authHeader());
         await this.fetchPlaces();
         this.deleteModalInstance.hide();
         this.$toast.success(`Đã xóa địa điểm "${this.selectedPlace.ten_dia_diem}" thành công!`);

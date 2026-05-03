@@ -37,7 +37,7 @@ class UpdateNguoiDungRequest extends FormRequest
             'ho_va_ten' => 'required|string|max:255',
             'email' => 'required|email|unique:nguoi_dungs,email,' . $nguoiDungId,
             'so_dien_thoai' => ['required', 'regex:/^(0|\+84)\d{9}$/'],
-            'anh_dai_dien' => 'nullable|string',
+            'anh_dai_dien' => 'nullable',
             'password' => 'nullable|string|min:6|confirmed',
             'password_confirmation' => 'nullable|string|min:6',
         ];

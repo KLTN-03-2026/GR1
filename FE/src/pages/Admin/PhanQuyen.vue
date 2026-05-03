@@ -159,7 +159,7 @@
 </template>
 
 <script>
-import axios from 'axios'
+import api from '../../services/api.js';
 import { Modal } from 'bootstrap'
 
 export default {
@@ -203,8 +203,8 @@ export default {
       this.loading = true;
       try {
         const [rolesRes, permsRes] = await Promise.all([
-          axios.get('http://127.0.0.1:8000/api/chuc-vus', this.authHeader()),
-          axios.get('http://127.0.0.1:8000/api/chuc-nangs', this.authHeader())
+          api.get('/chuc-vus', this.authHeader()),
+          api.get('/chuc-nangs', this.authHeader())
         ]);
 
         this.roles = rolesRes.data?.data || [];
@@ -236,7 +236,7 @@ export default {
     async createRole() {
       this.isSubmitting = true;
       try {
-        const res = await axios.post('http://127.0.0.1:8000/api/chuc-vus', this.formRole, this.authHeader());
+        const res = await api.post('/chuc-vus', this.formRole, this.authHeader());
         this.$toast?.success('Thêm chức vụ thành công');
         Modal.getInstance(document.getElementById('modalRole'))?.hide();
         await this.fetchData();
@@ -255,7 +255,7 @@ export default {
       if (!this.selectedRole || this.selectedRole.id === 1) return;
       this.isDeleting = true;
       try {
-        await axios.delete(`http://127.0.0.1:8000/api/chuc-vus/${this.selectedRole.id}`, this.authHeader());
+        await api.delete(`/chuc-vus/${this.selectedRole.id}`, this.authHeader());
         this.$toast?.success('Đã xóa chức vụ thành công');
         Modal.getInstance(document.getElementById('modalDeleteRole'))?.hide();
         this.selectedRole = null;
@@ -273,8 +273,8 @@ export default {
         const payload = {
           permissions: this.selectedPermissions // backend handles array of ma_chuc_nang
         };
-        const url = `http://127.0.0.1:8000/api/chuc-vus/${this.selectedRole.id}`;
-        await axios.put(url, payload, this.authHeader());
+        const url = `/chuc-vus/${this.selectedRole.id}`;
+        await api.put(url, payload, this.authHeader());
 
         this.$toast?.success('Cập nhật phân quyền thành công');
         await this.fetchData();

@@ -13,3 +13,7 @@ Route::get('/api-docs', function () {
 
 Route::get('/auth/google', [AuthController::class, 'redirectToGoogle']);
 Route::get('/auth/google/callback', [AuthController::class, 'handleGoogleCallback']);
+
+Route::get('/admin/dang-nhap', function () {
+    return view('admin.dang-nhap');
+});

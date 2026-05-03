@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\ChuyenDiController;
 use App\Http\Controllers\Api\LichTrinhDiaDiemController;
 use App\Http\Controllers\Api\NguoiDungController;
 use App\Http\Controllers\Api\DanhGiaHeThongController;
+use App\Http\Controllers\AuthController;
 
 /*
 |--------------------------------------------------------------------------
@@ -35,6 +36,12 @@ use App\Http\Controllers\Api\DanhGiaHeThongController;
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
+
+
+Route::prefix('auth')->group(function () {
+    Route::get('/google', [AuthController::class, 'redirectToGoogle']);
+    Route::get('/google/callback', [AuthController::class, 'handleGoogleCallback']);
+});
 
 Route::prefix('client')->group(function () {
     // Auth Routes
@@ -289,6 +296,7 @@ Route::get('/chuyen-di/{id}/dia-diems', [LichTrinhDiaDiemController::class, 'get
 Route::prefix('admin/nguoi-dungs')->group(function () {
     Route::get('get-data/', [NguoiDungController::class, 'getData']);
     Route::post('/create', [NguoiDungController::class, 'create']);
+    Route::post('/{nguoi_dung}/toggle-status', [NguoiDungController::class, 'toggleStatus']);
     Route::post('/{nguoi_dung}', [NguoiDungController::class, 'update']);
     Route::delete('/{nguoi_dung}', [NguoiDungController::class, 'destroy']);
 });

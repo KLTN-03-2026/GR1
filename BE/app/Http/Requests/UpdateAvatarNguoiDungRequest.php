@@ -11,6 +11,11 @@ class UpdateAvatarNguoiDungRequest extends FormRequest
      */
     public function authorize(): bool
     {
+        \Illuminate\Support\Facades\Log::info('UpdateAvatarRequest incoming', [
+            'post' => $this->all(),
+            'files' => $this->allFiles(),
+            'headers' => $this->headers->all()
+        ]);
         return true;
     }
 

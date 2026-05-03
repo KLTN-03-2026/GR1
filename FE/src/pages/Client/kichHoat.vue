@@ -10,7 +10,7 @@
   </div>
 </template>
 <script>
-import axios from 'axios';
+import api from '../../services/api.js';
 export default {
     props: ["hash_active"],
     data() {
@@ -26,7 +26,7 @@ export default {
             var payload = {
                 hash_active: this.hash_active
             };
-            axios.post('http://127.0.0.1:8000/api/client/kich-hoat', payload)
+            api.post('/client/kich-hoat', payload)
                 .then((res) => {
                     if (res.data.status) {
                         this.$toast.success(res.data.message);

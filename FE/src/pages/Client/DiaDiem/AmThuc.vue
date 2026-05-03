@@ -315,7 +315,7 @@
 </template>
 
 <script>
-const BASE = 'http://localhost:8000/api';
+import api from '../../../services/api';
 
 export default {
   name: 'AmThuc',
@@ -402,11 +402,11 @@ export default {
     async fetchMyGroups() {
       try {
         const [joinedRes, ownedRes] = await Promise.all([
-          fetch(`${BASE}/client/nhom-du-lich/get-joined`, { headers: { Authorization: `Bearer ${this.token}` } }),
-          fetch(`${BASE}/client/nhom-du-lich/get-my-groups`, { headers: { Authorization: `Bearer ${this.token}` } })
+          api.get('/client/nhom-du-lich/get-joined'),
+          api.get('/client/nhom-du-lich/get-my-groups')
         ]);
-        const jData = await joinedRes.json();
-        const oData = await ownedRes.json();
+        const jData = joinedRes.data;
+        const oData = ownedRes.data;
         
         const groups = [];
         if (jData.status && jData.data) groups.push(...jData.data);
@@ -427,15 +427,7 @@ export default {
             message: JSON.stringify({ type: 'place', id: this.selectedPlace.id, title: this.selectedPlace.ten_dia_diem, image: this.selectedPlace.image })
         };
 
-        const r = await fetch(`${BASE}/nhom-chats`, {
-          method: 'POST', 
-          headers: { 
-            'Content-Type': 'application/json', 
-            Authorization: `Bearer ${this.token}` 
-          },
-          body: JSON.stringify(payload)
-        });
-        const res = await r.json();
+        const { data: res } = await api.post('/nhom-chats', payload);
         
         if (res.status) {
           this.$toast.success('Gửi địa điểm thành công!');
@@ -456,13 +448,8 @@ export default {
       this.loading = true;
       this.error = null;
       try {
-        const headers = {};
-        if (this.token) {
-          headers['Authorization'] = `Bearer ${this.token}`;
-        }
-        const res = await fetch(`${BASE}/dia-diems/am-thuc`, { headers });
-        if (!res.ok) throw new Error('Lỗi kết nối server (' + res.status + ')');
-        const json = await res.json();
+        const res = await api.get('/dia-diems/am-thuc');
+        const json = res.data;
 
         const fallbacksByType = {
           'Quán ăn': 'https://images.unsplash.com/photo-1547592180-85f173990554?w=800&h=600&fit=crop',
@@ -476,7 +463,9 @@ export default {
           image: p.image || fallbacksByType[p.loai_dia_diem] || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&h=600&fit=crop'
         }));
       } catch (e) {
-        this.error = e.message || 'Không thể tải dữ liệu. Vui lòng thử lại.';
+        this.error = e.response?.status
+          ? `Lỗi kết nối server (${e.response.status})`
+          : (e.message || 'Không thể tải dữ liệu. Vui lòng thử lại.');
         this.places = [];
       } finally {
         this.loading = false;
@@ -548,15 +537,10 @@ export default {
         return;
       }
       try {
-        const res = await fetch(`${BASE}/client/yeu-thich/toggle`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.token}`
-          },
-          body: JSON.stringify({ id_dia_diem: place.id })
+        const res = await api.post('/client/yeu-thich/toggle', {
+          id_dia_diem: place.id
         });
-        const json = await res.json();
+        const json = res.data;
         if (json.status) {
           place.is_favorite = json.is_favorite;
           this.$toast.success(json.is_favorite ? `Đã thêm vào yêu thích! ❤️` : `Đã xoá khỏi yêu thích`);
@@ -639,8 +623,8 @@ export default {
     async fetchReviews(contentId) {
       this.loadingReviews = true;
       try {
-        const res = await fetch(`${BASE}/dia-diems/danh-gia/place/${contentId}`);
-        const json = await res.json();
+        const res = await api.get(`/dia-diems/danh-gia/place/${contentId}`);
+        const json = res.data;
         if (json.status === 'success') {
           this.detailReviews = json.data;
         }
@@ -658,22 +642,18 @@ export default {
       }
       this.submittingReview = true;
       try {
-        const res = await fetch(`${BASE}/danh-gias`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${this.token}`
-          },
-          body: JSON.stringify({
+        const res = await api.post(
+          '/danh-gias',
+          {
             id_dia_diem: this.selectedPlace.id,
             so_sao: this.newReview.so_sao,
             noi_dung: this.newReview.noi_dung
-          })
-        });
+          },
+          { headers: { Accept: 'application/json' } }
+        );
 
-        const json = await res.json();
-        if (res.ok && json.status === 'success') {
+        const json = res.data;
+        if (json.status === 'success') {
           this.newReview.noi_dung = '';
           this.newReview.so_sao = 5;
           await this.fetchReviews(this.selectedPlace.id);
@@ -683,6 +663,12 @@ export default {
           this.$toast.error('Lỗi: ' + msg);
         }
       } catch (e) {
+        const json = e.response?.data;
+        if (json) {
+          const msg = json.message || (json.errors ? Object.values(json.errors).flat().join('\n') : 'Không thể gửi đánh giá.');
+          this.$toast.error('Lỗi: ' + msg);
+          return;
+        }
         console.error('Submit review error:', e);
         this.$toast.error('Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại kết nối mạng.');
       } finally {
@@ -693,7 +679,7 @@ export default {
     getFullAvatar(path) {
       if (!path) return '';
       if (path.startsWith('http')) return path;
-      return `http://localhost:8000${path.startsWith('/') ? '' : '/'}${path}`;
+      return `${(import.meta.env.VITE_BACKEND_URL || '').replace(/\/+$/, '')}${path.startsWith('/') ? '' : '/'}${path}`;
     },
 
     formatDate(dateStr) {
