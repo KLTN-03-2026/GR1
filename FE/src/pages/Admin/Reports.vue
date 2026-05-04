@@ -16,8 +16,9 @@
             <i class="bi bi-search small"></i>
           </button>
         </div>
-        <button class="btn btn-primary d-flex align-items-center px-4" style="border-radius: 999px;">
-          <i class="bi bi-download me-2"></i> Trích xuất dữ liệu
+        <button class="btn btn-primary d-flex align-items-center px-4" @click="exportData" :disabled="exporting" style="border-radius: 999px;">
+          <span v-if="exporting" class="spinner-border spinner-border-sm me-2"></span>
+          <i v-else class="bi bi-download me-2"></i> Trích xuất dữ liệu
         </button>
       </div>
     </div>
@@ -241,6 +242,7 @@ export default {
       reportType: 'overview',
       startDate: '',
       endDate: '',
+      exporting: false,
       statsRaw: null,
       totalTrips: 0,
       totalUsers: 0,
@@ -390,6 +392,33 @@ export default {
         }
       } catch (error) {
         console.error("Lỗi khi tải dữ liệu reports", error)
+      }
+    },
+    async exportData() {
+      try {
+        this.exporting = true;
+        const token = localStorage.getItem('key_admin');
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        
+        let url = '/admin/statistics/export';
+        
+        const response = await api.get(url, { headers, responseType: 'blob' });
+        
+        const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const link = document.createElement('a');
+        link.href = window.URL.createObjectURL(blob);
+        link.download = `Top_Dia_Diem_Noi_Bat.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(link.href);
+        
+        // Cần import toast từ thư viện nếu có, ví dụ: this.$toast.success(...)
+      } catch (error) {
+        console.error("Lỗi khi xuất dữ liệu", error);
+        alert('Có lỗi xảy ra khi xuất Excel. Vui lòng thử lại sau.');
+      } finally {
+        this.exporting = false;
       }
     }
   }

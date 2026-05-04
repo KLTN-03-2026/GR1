@@ -129,6 +129,7 @@ Route::prefix('admin')->middleware('auth:sanctum')->group(function () {
     // Quyền Xem Báo cáo thống kê HOẶC Xem Dashboard
     Route::middleware('check_permission:report_view,dashboard_view')->group(function () {
         Route::get('/statistics', [AdminController::class, 'getStatistics']);
+        Route::get('/statistics/export', [AdminController::class, 'xuatExcel']);
     });
 
     // Quản lý đánh giá hệ thống (Admin)

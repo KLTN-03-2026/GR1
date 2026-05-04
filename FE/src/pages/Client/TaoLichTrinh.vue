@@ -197,6 +197,12 @@
             Hệ thống đã sắp xếp <strong>{{ tongSoDiaDiem }} địa điểm</strong> vào
             <strong>{{ lichTrinhTheoNgay.length }} ngày</strong>. Bạn có thể điều chỉnh thứ tự và thêm ghi chú.
           </p>
+          <!-- Chú ý: chi phí chưa bao gồm khách sạn -->
+          <div class="alert-hotel-notice mt-3">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <span><strong>Chú ý:</strong> Chi phí trên chưa bao gồm tiền khách sạn / chỗ ở. Vui lòng tính thêm khi lập ngân sách.</span>
+          </div>
+
           <div class="alert alert-success d-inline-flex align-items-center py-2 px-3 mt-2 mb-0"
             v-if="form.ngan_sach_du_kien > 0" style="border-radius: 20px;">
             <i class="bi bi-piggy-bank me-2 fs-5"></i>
@@ -213,7 +219,7 @@
         <!-- Budget tracker -->
         <div class="budget-tracker">
           <div class="budget-info">
-            <span>Chi phí vé ước tính</span>
+            <span>Chi phí ước tính</span>
             <strong>{{ formatCurrency(tongGiaVe) }}</strong>
           </div>
           <div v-if="form.ngan_sach_du_kien > 0" class="budget-info">
@@ -275,8 +281,11 @@
                         <span class="wib-label">{{ getWeatherAtTime(activeDayTab - 1, item.gio_bat_dau || item.gio).label }}</span>
                       </div>
                     </div>
-                    <div class="tc-order-btns">
-                      <button class="btn-remove" @click="removeItem(activeDayTab - 1, idx)" title="Xóa">
+                    <div class="tc-order-btns gap-2" style="display: flex; flex-direction: column;">
+                      <button class="btn btn-sm btn-outline-primary rounded-circle shadow-sm" @click="swapPlace(activeDayTab - 1, idx)" title="Đổi địa điểm khác" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+                        <i class="bi bi-arrow-repeat"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-danger rounded-circle shadow-sm" @click="removeItem(activeDayTab - 1, idx)" title="Xóa địa điểm này" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
                         <i class="bi bi-trash3"></i>
                       </button>
                     </div>
@@ -505,6 +514,7 @@
 </template>
 
 <script>
+import { axiosExternal } from '../../services/api.js';
 import api from '../../services/api.js';
 
 export default {
@@ -776,6 +786,116 @@ export default {
       }
     },
 
+    async swapPlace(dayIdx, itemIdx) {
+      const item = this.lichTrinhTheoNgay[dayIdx][itemIdx];
+      if (!item) return;
+
+      const btn = event?.currentTarget;
+      const originalHTML = btn ? btn.innerHTML : '';
+      if (btn && btn.tagName === 'BUTTON') {
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        btn.disabled = true;
+      }
+
+      try {
+        // Mô phỏng loading ngắn
+        await new Promise(r => setTimeout(r, 400));
+
+        const currentPlace = this.allDiaDiem.find(d => d.id === item.id_dia_diem);
+        if (!currentPlace) {
+          this.$toast?.error('Không tìm thấy thông tin địa điểm hiện tại.');
+          return;
+        }
+
+        const usedIds = this.lichTrinhTheoNgay.flat().map(i => i.id_dia_diem);
+
+        // Lọc ứng viên: cùng danh mục, chưa có trong lịch trình
+        const candidates = this.allDiaDiem.filter(d =>
+          d.id_danh_muc === currentPlace.id_danh_muc &&
+          !usedIds.includes(d.id)
+        );
+
+        if (candidates.length === 0) {
+          this.$toast?.error('Không tìm thấy địa điểm phù hợp để thay thế.');
+          return;
+        }
+
+        // ── Thuật toán Haversine + Price score (giống backend) ──────────
+        const haversine = (lat1, lng1, lat2, lng2) => {
+          if (!lat1 || !lng1 || !lat2 || !lng2) return 9999;
+          const R = 6371;
+          const dLat = (lat2 - lat1) * Math.PI / 180;
+          const dLng = (lng2 - lng1) * Math.PI / 180;
+          const a = Math.sin(dLat/2)**2 +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLng/2)**2;
+          return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        };
+
+        const lat1  = parseFloat(currentPlace.vi_do)  || 0;
+        const lng1  = parseFloat(currentPlace.kinh_do) || 0;
+        const gia1  = parseFloat(currentPlace.gia_ve)  || 0;
+
+        const scored = candidates.map(d => {
+          const lat2 = parseFloat(d.vi_do)  || 0;
+          const lng2 = parseFloat(d.kinh_do) || 0;
+          const gia2 = parseFloat(d.gia_ve)  || 0;
+          const dist = haversine(lat1, lng1, lat2, lng2);
+          const giaDiff = Math.abs(gia2 - gia1) / Math.max(1, gia1);
+          // Trọng số: khoảng cách 70%, giá 30% — giống backend
+          return { place: d, score: dist * 0.7 + giaDiff * 0.3, dist };
+        }).sort((a, b) => a.score - b.score);
+
+        // Lấy top 3 gần nhất rồi random 1 (tránh luôn trả về cùng 1 địa điểm)
+        const top3 = scored.slice(0, 3);
+        const chosen = top3[Math.floor(Math.random() * top3.length)].place;
+        // ────────────────────────────────────────────────────────────────
+
+        // Giữ nguyên giờ bắt đầu, chỉ cập nhật thời lượng từ địa điểm mới
+        const gioBatDau = item.gio_bat_dau || item.gio || '08:00';
+        const newDur = parseInt(chosen.thoi_gian_tham_quan_du_kien) || parseInt(item.thoi_luong_phut) || 60;
+        const toMin = t => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
+        const fmt   = m => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+        const gioKetThuc = fmt(toMin(gioBatDau) + newDur);
+
+        // Patch vào lichTrinhTheoNgay
+        this.lichTrinhTheoNgay[dayIdx].splice(itemIdx, 1, {
+          ...item,
+          id_dia_diem:     chosen.id,
+          ten_dia_diem:    chosen.ten_dia_diem,
+          dia_chi:         chosen.dia_chi,
+          vi_do:           chosen.vi_do,
+          kinh_do:         chosen.kinh_do,
+          hinh_anh:        chosen.hinh_anh || chosen.hinh_anh_chinh,
+          gia_ve:          chosen.gia_ve,
+          thoi_luong_phut: newDur,
+          gio_bat_dau:     gioBatDau,
+          gio:             gioBatDau,
+          gio_ket_thuc:    gioKetThuc,
+          thoi_gian_tham_quan_du_kien: chosen.thoi_gian_tham_quan_du_kien,
+        });
+
+        // Đồng bộ selectedDiaDiem (Bước 2)
+        const selIdx = this.selectedDiaDiem.findIndex(d => d.id === currentPlace.id);
+        if (selIdx !== -1) this.selectedDiaDiem.splice(selIdx, 1, chosen);
+
+        // Tính lại giờ các item tiếp theo trong ngày
+        this.recalcDayTimes(dayIdx);
+        this.$nextTick(() => this.renderMapForDay(dayIdx));
+
+        this.$toast?.success(`Đã đổi sang "${chosen.ten_dia_diem}" (cách ${top3[0].dist.toFixed(1)} km)!`);
+
+      } catch (error) {
+        this.$toast?.error('Lỗi khi đổi địa điểm!');
+        console.error(error);
+      } finally {
+        if (btn && btn.tagName === 'BUTTON') {
+          btn.innerHTML = originalHTML;
+          btn.disabled = false;
+        }
+      }
+    },
+
 
 
     // ─── Validation bước 1 ───────────────────────
@@ -953,7 +1073,7 @@ export default {
           + `&hourly=temperature_2m,weathercode`
           + `&timezone=Asia%2FHo_Chi_Minh`
           + `&start_date=${this.form.ngay_bat_dau}&end_date=${this.form.ngay_ket_thuc}`;
-        const res = await api.get(url);
+        const res = await axiosExternal.get(url);
         const json = res.data;
         if (!json.daily) return { daily: [], hourly: {} };
 
@@ -1128,37 +1248,37 @@ export default {
         handle: '.timeline-card',
         ghostClass: 'sortable-ghost',
         onEnd: (evt) => {
+          if (evt.oldIndex === evt.newIndex) return;
           const dayIdx = this.activeDayTab - 1;
           const dayItems = [...this.lichTrinhTheoNgay[dayIdx]];
-          const item = dayItems.splice(evt.oldIndex, 1)[0];
-          dayItems.splice(evt.newIndex, 0, item);
 
-          // Tính lại giờ dựa trên Haversine
-          const haversine = (lat1, lon1, lat2, lon2) => {
-            if (!lat1 || !lon1 || !lat2 || !lon2) return 5;
-            const R = 6371, dL = (lat2 - lat1) * Math.PI / 180, dN = (lon2 - lon1) * Math.PI / 180;
-            const a = Math.sin(dL/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dN/2)**2;
-            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-          };
-          const fmt = m => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+          // Lưu lại thời gian theo từng VỊ TRÍ (không theo item)
+          const timeSlots = dayItems.map(it => ({
+            gio_bat_dau: it.gio_bat_dau || it.gio,
+            gio_ket_thuc: it.gio_ket_thuc,
+            thoi_luong_phut: it.thoi_luong_phut || 60,
+          }));
 
-          let curMin = 6*60+30;
-          let prevLat = null, prevLng = null;
-          dayItems.forEach((it) => {
+          // Di chuyển item sang vị trí mới
+          const moved = dayItems.splice(evt.oldIndex, 1)[0];
+          dayItems.splice(evt.newIndex, 0, moved);
+
+          // Gán lại giờ một cách tuần tự từ trên xuống dưới
+          const fmt = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+          const toMin = t => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+
+          let currentMin = timeSlots.length > 0 ? toMin(timeSlots[0].gio_bat_dau) : 6 * 60 + 30;
+
+          dayItems.forEach((it, idx) => {
+            const travelAdd = (idx > 0) ? 15 : 0; // Thời gian di chuyển 15 phút
+            const startMin = currentMin + travelAdd;
             const dur = it.thoi_luong_phut || 60;
-            let travelMin = 12;
-            if (prevLat !== null && it.vi_do && it.kinh_do) {
-              const dist = haversine(prevLat, prevLng, parseFloat(it.vi_do), parseFloat(it.kinh_do));
-              travelMin = Math.max(5, Math.min(40, Math.ceil(dist / 20 * 60) + 5));
-            }
-            const startMin = curMin + (prevLat !== null ? travelMin : 0);
-            const endMin = startMin + dur;
+            
             it.gio = fmt(startMin);
             it.gio_bat_dau = fmt(startMin);
-            it.gio_ket_thuc = fmt(endMin);
-            curMin = endMin;
-            prevLat = parseFloat(it.vi_do) || prevLat;
-            prevLng = parseFloat(it.kinh_do) || prevLng;
+            it.gio_ket_thuc = fmt(startMin + dur);
+            
+            currentMin = startMin + dur;
           });
 
           this.lichTrinhTheoNgay[dayIdx] = dayItems;
@@ -1169,8 +1289,51 @@ export default {
 
     // ─── Xóa item trong lịch trình ──
     removeItem(dayIdx, itemIdx) {
+      const removedItem = this.lichTrinhTheoNgay[dayIdx][itemIdx];
       this.lichTrinhTheoNgay[dayIdx].splice(itemIdx, 1);
+
+      // Xóa khỏi danh sách đã chọn → cho phép chọn lại ở bước 2
+      if (removedItem && removedItem.id_dia_diem) {
+        const selIdx = this.selectedDiaDiem.findIndex(d => d.id === removedItem.id_dia_diem);
+        if (selIdx !== -1) {
+          this.selectedDiaDiem.splice(selIdx, 1);
+        }
+      }
+
+      // Tái tính lại giờ cho các item còn lại trong ngày (tránh khoảng trống)
+      this.recalcDayTimes(dayIdx);
+
+      // Cập nhật bản đồ
+      this.$nextTick(() => {
+        this.renderMapForDay(dayIdx);
+      });
     },
+
+    // ─── Tái tính giờ sau khi thêm/xóa (giữ nguyên slot, chỉ bù nhỏ) ──
+    recalcDayTimes(dayIdx) {
+      const fmt = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+      const toMin = t => { if (!t) return 7 * 60; const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
+      const day = this.lichTrinhTheoNgay[dayIdx];
+      if (!day || day.length === 0) return;
+
+      // Với mỗi item: giữ nguyên giờ bắt đầu, chỉ tính lại gio_ket_thuc từ dur
+      // Nếu 2 item liền nhau bị trùng giờ thì cộng thêm 5-10 phút
+      day.forEach((item, idx) => {
+        let startMin = toMin(item.gio_bat_dau || item.gio);
+        if (idx > 0) {
+          const prevEnd = toMin(day[idx - 1].gio_ket_thuc);
+          if (startMin < prevEnd + 5) {
+            startMin = prevEnd + 7; // đẩy lên 7 phút sau item trước
+          }
+        }
+        const dur = item.thoi_luong_phut || 60;
+        item.gio = fmt(startMin);
+        item.gio_bat_dau = fmt(startMin);
+        item.gio_ket_thuc = fmt(startMin + dur);
+      });
+    },
+
+
 
     // ─── Lưu lịch trình ─────────────────────────
     async saveLichTrinh(skipRating = false) {
@@ -1284,7 +1447,6 @@ export default {
     async renderMapForDay(dayIndex) {
       const L = window.L;
       if (!L) {
-        // Leaflet may still be loading; retry after a short delay
         setTimeout(() => this.renderMapForDay(dayIndex), 500);
         return;
       }
@@ -1298,7 +1460,6 @@ export default {
 
       if (validItems.length === 0) return;
 
-      // Create numbered markers for each location
       const bounds = [];
       validItems.forEach((item, idx) => {
         const lat = parseFloat(item.vi_do);
@@ -1307,35 +1468,69 @@ export default {
 
         bounds.push([lat, lng]);
 
+        // Màu gradient theo thứ tự: start=xanh lá, giữa=xanh dương, end=tím
+        const colors = ['#10b981', '#0ea5e9', '#8b5cf6', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6', '#6366f1'];
+        const bgColor = idx === 0 ? '#10b981' : idx === validItems.length - 1 ? '#ef4444' : colors[idx % colors.length];
+
         const icon = L.divIcon({
           className: '',
           html: `<div style="
-            background: #5a67d8; color: #fff; border-radius: 50%;
-            width: 32px; height: 32px; display: flex; align-items: center;
-            justify-content: center; font-weight: 700; font-size: 14px;
-            border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            background: ${bgColor}; color: #fff; border-radius: 50%;
+            width: 34px; height: 34px; display: flex; align-items: center;
+            justify-content: center; font-weight: 800; font-size: 14px;
+            border: 3px solid #fff; box-shadow: 0 3px 10px rgba(0,0,0,0.35);
           ">${idx + 1}</div>`,
-          iconSize: [32, 32],
-          iconAnchor: [16, 16],
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
         });
 
         const imgUrl = item.hinh_anh || 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=200&q=60';
         const marker = L.marker([lat, lng], { icon })
           .bindPopup(`
-            <div style="min-width:180px">
+            <div style="min-width:190px; font-family: 'Inter', sans-serif;">
               <img src="${imgUrl}" style="width:100%;height:90px;object-fit:cover;border-radius:6px;margin-bottom:6px">
-              <strong style="font-size:14px">${item.ten_dia_diem}</strong><br>
-              <small style="color:#666">${item.dia_chi || 'Đà Nẵng'}</small><br>
-              <small>🕐 ${item.gio}</small>
+              <strong style="font-size:14px;color:#1e2d44">${item.ten_dia_diem}</strong><br>
+              <small style="color:#64748b">📍 ${item.dia_chi || 'Đà Nẵng'}</small><br>
+              <small style="color:#10b981;font-weight:600">🕐 ${item.gio_bat_dau || item.gio}</small>
             </div>
-          `, { maxWidth: 220 })
+          `, { maxWidth: 230 })
           .addTo(this.mapInstance);
 
         this.mapLayers.push(marker);
       });
 
       if (bounds.length > 0) {
-        this.mapInstance.fitBounds(bounds, { padding: [40, 40] });
+        this.mapInstance.fitBounds(bounds, { padding: [50, 50] });
+      }
+
+      // Vẽ tuyến đường thực tế qua OSRM routing API
+      if (bounds.length > 1) {
+        const coordinates = bounds.map(([lat, lng]) => `${lng},${lat}`).join(';');
+        const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson`;
+        
+        axiosExternal.get(osrmUrl).then(routeRes => {
+          const routeData = routeRes.data;
+
+          if (routeData.routes && routeData.routes[0]) {
+            const routeCoords = routeData.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+            const routeLine = L.polyline(routeCoords, {
+              color: '#0ea5e9',
+              weight: 5,
+              opacity: 0.85,
+              lineJoin: 'round',
+              lineCap: 'round',
+            }).addTo(this.mapInstance);
+            this.mapLayers.push(routeLine);
+          } else {
+            // Fallback: vẽ đường thẳng nếu OSRM không có dữ liệu
+            const fallbackLine = L.polyline(bounds, { color: '#0ea5e9', weight: 4, opacity: 0.7, dashArray: '10, 8' }).addTo(this.mapInstance);
+            this.mapLayers.push(fallbackLine);
+          }
+        }).catch(() => {
+          // Fallback khi lỗi mạng
+          const fallbackLine = L.polyline(bounds, { color: '#0ea5e9', weight: 4, opacity: 0.7, dashArray: '10, 8' }).addTo(this.mapInstance);
+          this.mapLayers.push(fallbackLine);
+        });
       }
     },
 
@@ -2013,7 +2208,33 @@ label {
   background: linear-gradient(90deg, #f43f5e, #fb923c);
 }
 
-/* ──────────── Day tabs ──────────── */
+/* \u2500\u2500\u2500 Hotel notice alert \u2500\u2500\u2500 */
+.alert-hotel-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: linear-gradient(135deg, #fff7ed, #fef3c7);
+  border: 1.5px solid #f59e0b;
+  border-left: 5px solid #f59e0b;
+  border-radius: 12px;
+  padding: 0.85rem 1.2rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+  color: #78350f;
+  font-weight: 500;
+  box-shadow: 0 2px 10px rgba(245,158,11,0.15);
+}
+.alert-hotel-notice i {
+  font-size: 1.3rem;
+  color: #f59e0b;
+  flex-shrink: 0;
+}
+.alert-hotel-notice strong {
+  color: #92400e;
+  font-size: 1rem;
+}
+
+/* \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 Day tabs \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
 .day-tabs {
   display: flex;
   gap: 0.55rem;
