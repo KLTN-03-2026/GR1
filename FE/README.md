@@ -127,19 +127,19 @@ Khoá Luận Tốt Nghiệp/
 
 ## 👨‍💻 Nhà phát triển
 
-- 🎓 **[Nguyễn Anh Hiếu]** - [Vai trò: FullStack] - 📧 Email: pon2412004@gmail.com
-- 🎓 **[Bùi Trung Hiếu]** - [Vai trò: Fullstack] - 📧 Email: buitrunghieu3@dtu.edu.vn
+- 🎓 **[Nguyễn Anh Hiếu]** - [Vai trò: Backend/Frontend] - 📧 Email: nguyenanhhieu@dtu.edu.vn
+- 🎓 **[Bùi Trung Hiếu]** - [Vai trò: Backend/Frontend] - 📧 Email: buitrunghieu3@dtu.edu.vn
 - 🎓 **[Nguyễn Việt Hoàng]** - [Vai trò: Frontend] - 📧 Email: nguyenviethoang14@dtu.edu.vn
-- 🎓 **[Võ Khải Hoàn]** - [Vai trò: Frontend] - 📧 Email: vokhaihoan@dtu.edu.vn
-- 🎓 **[Lê Thị Thanh Lam]** - [Vai trò: Frontend] - 📧 Email: letthanhlam@dtu.edu.vn
+- 🎓 **[Võ Khải Hoàn]** - [Vai trò: Frontend/UI/UX] - 📧 Email: vokhaihoan@dtu.edu.vn
+- 🎓 **[Lê Thị Thanh Lam]** - [Vai trò: Frontend/UI/UX] - 📧 Email: letthanhlam@dtu.edu.vn
 
 **Giảng viên hướng dẫn:** ThS. [Nguyễn Quốc Long]
 
 *"🏫 Khoá Luận Tốt Nghiệp - [Đại Học Duy Tân] ✨"*
 
 ## 📞 Liên hệ
-- Nhóm sinh viên: [Tên nhóm/Tên bạn]
-- 📧 Email hỗ trợ: [nguyenanhhieu241@gmail.com] 
+- Sinh viên: [Nguyễn Anh Hiếu]
+- 📧 Email hỗ trợ: [nguyenanhhieu@dtu.edu.vn] 
 
 ## 🤝 Đóng góp (Contributing)
 Chúng tôi rất hoan nghênh mọi đóng góp! 
