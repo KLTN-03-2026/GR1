@@ -5,250 +5,230 @@
         <h2 class="h3 mb-1 text-dark fw-bold">{{ pageTitle }}</h2>
         <p class="text-muted mb-0">{{ pageSubtitle }}</p>
       </div>
-      <div class="d-flex align-items-center bg-white border border-secondary-subtle rounded-pill px-3 shadow-sm" style="height:42px;">
-        <i class="bi bi-calendar3 text-primary me-2"></i>
-        <input type="date" v-model="startDate" class="form-control border-0 bg-transparent p-0 text-secondary" style="width:125px;box-shadow:none;"/>
-        <span class="text-muted fw-bold mx-2">→</span>
-        <input type="date" v-model="endDate" class="form-control border-0 bg-transparent p-0 text-secondary" style="width:125px;box-shadow:none;"/>
-        <div class="vr mx-3 text-secondary" style="height:20px;"></div>
-        <button class="btn btn-sm btn-primary rounded-circle d-flex align-items-center justify-content-center p-0" @click="fetchReportsData" style="width:28px;height:28px;">
-          <i class="bi bi-search small"></i>
+      <div class="d-flex gap-2">
+        <div class="d-flex align-items-center bg-white border border-secondary-subtle rounded-pill px-3 shadow-sm me-2" style="height: 42px;">
+          <i class="bi bi-calendar3 text-primary me-2"></i>
+          <input type="date" v-model="startDate" class="form-control border-0 bg-transparent p-0 text-secondary" style="width: 125px; box-shadow: none; outline: none;:focus {box-shadow: none}" />
+          <span class="text-muted fw-bold mx-2">→</span>
+          <input type="date" v-model="endDate" class="form-control border-0 bg-transparent p-0 text-secondary" style="width: 125px; box-shadow: none; outline: none;" />
+          <div class="vr mx-3 text-secondary" style="height: 20px;"></div>
+          <button class="btn btn-sm btn-primary rounded-circle d-flex align-items-center justify-content-center p-0" title="Áp dụng Mốc Thời Gian" @click="fetchReportsData" style="width: 28px; height: 28px; transform: translateX(4px);">
+            <i class="bi bi-search small"></i>
+          </button>
+        </div>
+        <button class="btn btn-primary d-flex align-items-center px-4" @click="exportData" :disabled="exporting" style="border-radius: 999px;">
+          <span v-if="exporting" class="spinner-border spinner-border-sm me-2"></span>
+          <i v-else class="bi bi-download me-2"></i> Trích xuất dữ liệu
         </button>
       </div>
     </div>
 
-    <!-- ── Spinner ── -->
-    <div v-if="loading" class="text-center py-5">
-      <div class="spinner-border text-primary" role="status"></div>
-      <p class="text-muted mt-2">Đang tải dữ liệu phân tích...</p>
+    <!-- Quick Stats Row -->
+    <div class="row g-3 mb-4" v-if="reportType === 'overview'">
+      <div class="col-md-4">
+        <div class="card card-custom h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h6 class="text-muted mb-0 fw-semibold">Tỷ lệ tương tác tích cực</h6>
+            </div>
+            <div class="fs-2 fw-bold text-dark mb-1">{{ totalUsers > 0 ? ((activeUsers / totalUsers) * 100).toFixed(1) : 0 }}%</div>
+            <p class="small text-muted mb-0">Người dùng được mã hóa hợp lệ</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card card-custom h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h6 class="text-muted mb-0 fw-semibold">Lưu trữ Đánh giá</h6>
+            </div>
+            <div class="fs-2 fw-bold text-dark mb-1">{{ totalReviews.toLocaleString() }}</div>
+            <p class="small text-muted mb-0">Khối lượng Feedback hệ thống ghi nhận</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card card-custom bg-primary text-white h-100">
+          <div class="card-body position-relative overflow-hidden">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h6 class="text-white-50 mb-0 fw-semibold">Thang điểm trung bình</h6>
+              <i class="bi bi-star-fill text-white-50"></i>
+            </div>
+            <div class="fs-2 fw-bold mb-1">{{ avgRating }} / 5.0</div>
+            <p class="small text-white-50 mb-0">Chất lượng dịch vụ lõi</p>
+            <i class="bi bi-award position-absolute" style="font-size: 8rem; right: -20px; bottom: -40px; opacity: 0.1;"></i>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <template v-else>
-      <!-- ══════════════════════════════════════════
-           NHÓM 1: TRẠNG THÁI LỊCH TRÌNH
-      ══════════════════════════════════════════ -->
-      <div class="section-title mb-2 mt-3">
-        <i class="bi bi-bar-chart-steps me-2 text-primary"></i>
-        <span class="fw-bold">1. Phân tích lịch trình theo trạng thái</span>
-        <small class="text-muted ms-2">Đo lường mức độ người dùng thực sự đi theo kế hoạch AI</small>
+    <!-- Quick Stats Row -> Specific Reports -->
+    <div class="row g-3 mb-4" v-if="['trips', 'users'].includes(reportType)">
+      <!-- Lịch trình -->
+      <div class="col-md-6" v-if="reportType === 'trips'">
+        <div class="card card-custom h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h6 class="text-muted mb-0 fw-semibold">Tổng lượt tạo lịch trình</h6>
+            </div>
+            <div class="fs-2 fw-bold text-dark mb-1">{{ totalTrips.toLocaleString() }}</div>
+            <p class="small text-muted mb-0">so với tháng trước (10,873)</p>
+          </div>
+        </div>
       </div>
-      <div class="row g-3 mb-4">
-        <div class="col-6 col-md-3">
-          <div class="stat-card border-start border-4 border-info">
-            <div class="stat-icon bg-info-subtle"><i class="bi bi-pencil-square text-info"></i></div>
-            <div class="stat-value text-info">{{ tripStatus.dang_len_ke_hoach || 0 }}</div>
-            <div class="stat-label">Đang lên kế hoạch</div>
-            <div class="stat-pct">{{ pct(tripStatus.dang_len_ke_hoach, tripStatus.tong_so) }}%</div>
-          </div>
-        </div>
-        <div class="col-6 col-md-3">
-          <div class="stat-card border-start border-4 border-warning">
-            <div class="stat-icon bg-warning-subtle"><i class="bi bi-lock-fill text-warning"></i></div>
-            <div class="stat-value text-warning">{{ tripStatus.da_chot || 0 }}</div>
-            <div class="stat-label">Đã chốt / Đang đi</div>
-            <div class="stat-pct">{{ pct(tripStatus.da_chot, tripStatus.tong_so) }}%</div>
-          </div>
-        </div>
-        <div class="col-6 col-md-3">
-          <div class="stat-card border-start border-4 border-success">
-            <div class="stat-icon bg-success-subtle"><i class="bi bi-check-circle-fill text-success"></i></div>
-            <div class="stat-value text-success">{{ tripStatus.da_hoan_thanh || 0 }}</div>
-            <div class="stat-label">Đã hoàn thành</div>
-            <div class="stat-pct">{{ pct(tripStatus.da_hoan_thanh, tripStatus.tong_so) }}%</div>
-          </div>
-        </div>
-        <div class="col-6 col-md-3">
-          <div class="stat-card border-start border-4 border-danger">
-            <div class="stat-icon bg-danger-subtle"><i class="bi bi-x-circle-fill text-danger"></i></div>
-            <div class="stat-value text-danger">{{ tripStatus.da_huy || 0 }}</div>
-            <div class="stat-label">Đã hủy</div>
-            <div class="stat-pct">{{ pct(tripStatus.da_huy, tripStatus.tong_so) }}%</div>
+      
+      <div class="col-md-6" v-if="reportType === 'trips'">
+        <div class="card card-custom bg-primary text-white h-100">
+          <div class="card-body position-relative overflow-hidden">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h6 class="text-white-50 mb-0 fw-semibold">Tổng chi tiêu dự kiến</h6>
+              <i class="bi bi-wallet2 text-white-50"></i>
+            </div>
+            <div class="fs-2 fw-bold mb-1">{{ formatCurrency(avgBudget) }}</div>
+            <p class="small text-white-50 mb-0">Chi tiêu trung bình/chuyến</p>
+            <i class="bi bi-graph-up-arrow position-absolute" style="font-size: 8rem; right: -20px; bottom: -40px; opacity: 0.1;"></i>
           </div>
         </div>
       </div>
 
-      <!-- ══════════════════════════════════════════
-           NHÓM 2: PHÂN KHÚC NGÂN SÁCH
-      ══════════════════════════════════════════ -->
-      <div class="section-title mb-2 mt-4">
-        <i class="bi bi-wallet2 me-2 text-success"></i>
-        <span class="fw-bold">2. Phân tích ngân sách</span>
-        <small class="text-muted ms-2">Tỉ lệ nhập ngân sách & phân khúc chi tiêu</small>
+      <div class="col-md-6" v-if="reportType === 'users'">
+        <div class="card card-custom h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h6 class="text-muted mb-0 fw-semibold">Người dùng mới</h6>
+            </div>
+            <div class="fs-2 fw-bold text-dark mb-1">{{ totalUsers.toLocaleString() }}</div>
+            <p class="small text-muted mb-0">Tổng tài khoản đã đăng ký</p>
+          </div>
+        </div>
       </div>
-      <div class="row g-3 mb-4">
-        <div class="col-md-4">
-          <div class="card card-custom h-100">
-            <div class="card-body">
-              <h6 class="text-muted fw-semibold mb-3">Tỉ lệ nhập ngân sách</h6>
-              <div class="d-flex align-items-center gap-3 mb-2">
-                <div class="fs-2 fw-bold text-success">{{ budgetFillRate }}%</div>
-                <div class="small text-muted">lịch trình có điền ngân sách cụ thể</div>
-              </div>
-              <div class="progress" style="height:10px;border-radius:8px;">
-                <div class="progress-bar bg-success" :style="{ width: budgetFillRate + '%' }"></div>
-              </div>
-              <div class="d-flex justify-content-between mt-1">
-                <small class="text-success">Có ngân sách: {{ budgetSegments.co_ngan_sach || 0 }}</small>
-                <small class="text-muted">Không: {{ budgetSegments.khong_ngan_sach || 0 }}</small>
-              </div>
+      
+      <div class="col-md-6" v-if="reportType === 'users'">
+        <div class="card card-custom h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <h6 class="text-muted mb-0 fw-semibold">Nhóm du lịch</h6>
+            </div>
+            <div class="fs-2 fw-bold text-dark mb-1">{{ totalGroups.toLocaleString() }}</div>
+            <p class="small text-muted mb-0">Cộng đồng đang hoạt động</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row g-3 mb-4">
+      <div :class="reportType === 'overview' ? 'col-lg-8' : 'col-12'" v-if="['overview', 'trips', 'users'].includes(reportType)">
+        <div class="card card-custom h-100">
+          <div class="card-header border-bottom-0 bg-transparent pt-4 pb-0 d-flex justify-content-between">
+            <h5 class="mb-0 fw-bold">{{ getChartTitle() }}</h5>
+          </div>
+          <div class="card-body">
+            <apexchart type="bar" height="320" :options="barChartOptions" :series="filteredBarSeries"></apexchart>
+          </div>
+        </div>
+      </div>
+      <div :class="reportType === 'overview' ? 'col-lg-4' : 'col-lg-4'" v-if="['overview', 'places'].includes(reportType)">
+        <div class="card card-custom h-100">
+          <div class="card-header border-bottom-0 bg-transparent pt-4 pb-0">
+            <h5 class="mb-0 fw-bold">Phân bổ danh mục địa điểm</h5>
+            <p class="text-muted small">Tỷ lệ các danh mục được thêm vào lịch trình nhiều nhất</p>
+          </div>
+          <div class="card-body d-flex justify-content-center align-items-center">
+            <apexchart type="donut" width="300" :options="donutOptions" :series="donutSeries"></apexchart>
+          </div>
+        </div>
+      </div>
+
+      <!-- Data Table placed inline if places mode -->
+      <div class="col-lg-8" v-if="reportType === 'places'">
+        <div class="card card-custom h-100 mb-0">
+          <div class="card-header border-bottom bg-transparent py-3 d-flex justify-content-between align-items-center">
+            <h5 class="mb-0 fw-bold">10 địa điểm nổi bật nhất tháng</h5>
+          </div>
+          <div class="card-body p-0">
+            <div class="table-responsive">
+              <table class="table table-hover align-middle mb-0">
+                <thead class="bg-light">
+                  <tr>
+                    <th class="ps-4 text-secondary py-3">TÊN ĐỊA ĐIỂM</th>
+                    <th class="text-secondary py-3">LƯỢT CHỌN</th>
+                    <th class="text-secondary py-3">ĐÁNH GIÁ</th>
+                    <th class="pe-4 text-end text-secondary py-3">XU HƯỚNG</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(place, index) in topPlaces" :key="index">
+                    <td class="ps-4 py-3">
+                      <div class="d-flex align-items-center">
+                        <span class="fw-bold text-dark">{{ place.name || 'Đang tải...' }}</span>
+                      </div>
+                    </td>
+                    <td class="py-3 fw-semibold text-dark">{{ place.selections.toLocaleString() }}</td>
+                    <td class="py-3">
+                      <div class="d-flex align-items-center"><i class="bi bi-star-fill text-warning me-1 small"></i><span class="fw-bold">{{ place.rating.toFixed(1) }}</span></div>
+                    </td>
+                    <td class="pe-4 text-end py-3">
+                      <span class="badge" :class="place.trend > 0 ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger'">{{ Math.abs(place.trend) }}%</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
-        <div class="col-md-8">
-          <div class="card card-custom h-100">
-            <div class="card-body">
-              <h6 class="text-muted fw-semibold mb-3">Phân khúc ngân sách</h6>
-              <div class="row g-2">
-                <div class="col-6" v-for="seg in budgetSegsDisplay" :key="seg.label">
-                  <div class="d-flex justify-content-between align-items-center p-2 rounded-3" :style="{ background: seg.bg }">
-                    <span class="small fw-bold" :style="{ color: seg.color }">{{ seg.label }}</span>
-                    <span class="badge" :style="{ background: seg.color, color: '#fff' }">{{ seg.count }}</span>
+      </div>
+    </div>
+
+    <!-- Data Table (Overview mode - Full width) -->
+    <div class="card card-custom mb-5" v-if="reportType === 'overview'">
+      <div class="card-header border-bottom bg-transparent py-3 d-flex justify-content-between align-items-center">
+        <h5 class="mb-0 fw-bold">10 địa điểm nổi bật nhất tháng</h5>
+        <button class="btn btn-sm btn-light">Xem toàn bộ</button>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th class="py-3 text-secondary fw-semibold text-uppercase" style="font-size: 0.75rem"># Tên địa điểm</th>
+              <th class="py-3 text-secondary fw-semibold text-uppercase" style="font-size: 0.75rem">Danh mục</th>
+              <th class="py-3 text-secondary fw-semibold text-uppercase" style="font-size: 0.75rem">Lượt chọn</th>
+              <th class="py-3 text-secondary fw-semibold text-uppercase" style="font-size: 0.75rem">Đánh giá</th>
+              <th class="py-3 text-secondary fw-semibold text-uppercase text-end" style="font-size: 0.75rem">Biến động</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(place, index) in topPlaces" :key="index">
+              <td class="py-3">
+                <div class="d-flex align-items-center">
+                  <div class="bg-light rounded p-2 me-3">
+                    <i class="bi bi-geo-alt-fill text-primary" v-if="index < 3"></i>
+                    <i class="bi bi-geo-alt text-secondary" v-else></i>
                   </div>
-                  <div class="progress mt-1" style="height:5px;border-radius:4px;">
-                    <div class="progress-bar" :style="{ width: pct(seg.count, budgetSegments.tong) + '%', background: seg.color }"></div>
-                  </div>
+                  <span class="fw-bold text-dark">{{ place.name || 'Đang tải...' }}</span>
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ══════════════════════════════════════════
-           NHÓM 3: SỞ THÍCH NGƯỜI DÙNG
-      ══════════════════════════════════════════ -->
-      <div class="section-title mb-2 mt-4">
-        <i class="bi bi-heart-fill me-2 text-danger"></i>
-        <span class="fw-bold">3. Phân tích sở thích người dùng</span>
-        <small class="text-muted ms-2">Căn cứ để AI ưu tiên gợi ý loại hình du lịch</small>
-      </div>
-      <div class="row g-3 mb-4">
-        <div class="col-md-7">
-          <div class="card card-custom h-100">
-            <div class="card-body">
-              <h6 class="text-muted fw-semibold mb-3">Top danh mục được yêu thích</h6>
-              <div v-for="(pref, i) in userPreferences" :key="i" class="mb-3">
-                <div class="d-flex justify-content-between mb-1">
-                  <span class="fw-bold small">{{ pref.ten_danh_muc }}</span>
-                  <span class="small text-muted">{{ pref.so_nguoi_thich }} người · ⭐ {{ pref.diem_trung_binh }}</span>
+              </td>
+              <td class="py-3">
+                <span class="badge bg-light text-secondary border px-2 py-1">{{ place.category }}</span>
+              </td>
+              <td class="py-3 fw-semibold">{{ place.selections.toLocaleString() }}</td>
+              <td class="py-3">
+                <div class="d-flex align-items-center">
+                  <i class="bi bi-star-fill text-warning me-1" style="font-size: 0.8rem"></i>
+                  <span class="fw-bold">{{ place.rating }}</span>
                 </div>
-                <div class="progress" style="height:8px;border-radius:6px;">
-                  <div class="progress-bar" :style="{ width: pct(pref.so_nguoi_thich, maxPrefCount) + '%', background: prefColors[i % prefColors.length] }"></div>
-                </div>
-              </div>
-              <div v-if="!userPreferences.length" class="text-muted small text-center py-3">Chưa có dữ liệu sở thích</div>
-            </div>
-          </div>
-        </div>
-        <div class="col-md-5">
-          <div class="card card-custom h-100">
-            <div class="card-body">
-              <h6 class="text-muted fw-semibold mb-3">Phân bổ mức độ yêu thích (1–5⭐)</h6>
-              <div v-for="star in 5" :key="star" class="d-flex align-items-center gap-2 mb-2">
-                <span class="small fw-bold" style="width:20px;">{{ star }}⭐</span>
-                <div class="progress flex-grow-1" style="height:10px;border-radius:6px;">
-                  <div class="progress-bar bg-warning" :style="{ width: pct(prefDistMap[star] || 0, totalPrefCount) + '%' }"></div>
-                </div>
-                <span class="small text-muted" style="width:30px;">{{ prefDistMap[star] || 0 }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+              </td>
+              <td class="py-3 text-end">
+                <span class="badge" :class="place.trend > 0 ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger'">
+                  <i class="bi" :class="place.trend > 0 ? 'bi-arrow-up-right' : 'bi-arrow-down-right'"></i>
+                  {{ Math.abs(place.trend) }}%
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-
-      <!-- ══════════════════════════════════════════
-           NHÓM 4: HIỆU QUẢ GỢI Ý ĐỊA ĐIỂM
-      ══════════════════════════════════════════ -->
-      <div class="section-title mb-2 mt-4">
-        <i class="bi bi-robot me-2 text-primary"></i>
-        <span class="fw-bold">4. Hiệu quả gợi ý địa điểm của AI</span>
-        <small class="text-muted ms-2">Đánh giá thuật toán phân bổ lịch trình</small>
-      </div>
-      <div class="row g-3 mb-4">
-        <div class="col-md-4">
-          <div class="stat-card border-start border-4 border-primary">
-            <div class="stat-icon bg-primary-subtle"><i class="bi bi-geo-alt-fill text-primary"></i></div>
-            <div class="stat-value text-primary">{{ avgPlacesPerTrip.avg_places || 0 }}</div>
-            <div class="stat-label">Địa điểm TB / Lịch trình</div>
-            <div class="stat-pct">Min {{ avgPlacesPerTrip.min_places || 0 }} · Max {{ avgPlacesPerTrip.max_places || 0 }}</div>
-          </div>
-        </div>
-        <div class="col-md-4">
-          <div class="stat-card border-start border-4 border-indigo">
-            <div class="stat-icon" style="background:#ede9fe;"><i class="bi bi-clock-history" style="color:#6d28d9;"></i></div>
-            <div class="stat-value" style="color:#6d28d9;">{{ avgVisitDuration }}<small class="fs-6"> phút</small></div>
-            <div class="stat-label">Thời gian tham quan TB</div>
-            <div class="stat-pct">Lấy từ cột thoi_gian_du_kien</div>
-          </div>
-        </div>
-        <div class="col-md-4">
-          <div class="stat-card border-start border-4 border-success">
-            <div class="stat-icon bg-success-subtle"><i class="bi bi-graph-up-arrow text-success"></i></div>
-            <div class="stat-value text-success">{{ totalTrips }}</div>
-            <div class="stat-label">Tổng lịch trình đã tạo</div>
-            <div class="stat-pct">Toàn thời gian</div>
-          </div>
-        </div>
-        <div class="col-12">
-          <div class="card card-custom">
-            <div class="card-body">
-              <h6 class="text-muted fw-semibold mb-1">📊 Ghi chú AI</h6>
-              <ul class="small text-secondary mb-0 ps-3">
-                <li>Trung bình <strong>{{ avgPlacesPerTrip.avg_places || '...' }} địa điểm/lịch trình</strong> — nếu &lt; 4 thì AI đang phân bổ quá ít, nếu &gt; 9 thì có thể đang "nhồi nhét".</li>
-                <li>Thời gian tham quan TB <strong>{{ avgVisitDuration }} phút</strong> — dùng để AI vạch khung giờ hợp lý cho từng slot.</li>
-                <li>Tỉ lệ lịch trình hoàn thành: <strong>{{ pct(tripStatus.da_hoan_thanh, tripStatus.tong_so) }}%</strong> — chứng minh tính thực tế của lịch trình AI.</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ══════════════════════════════════════════
-           NHÓM 5: ĐÁNH GIÁ THEO NHÓM ĐỊA ĐIỂM
-      ══════════════════════════════════════════ -->
-      <div class="section-title mb-2 mt-4">
-        <i class="bi bi-star-fill me-2 text-warning"></i>
-        <span class="fw-bold">5. Đánh giá theo nhóm địa điểm</span>
-        <small class="text-muted ms-2">Chất lượng dịch vụ theo từng loại hình du lịch</small>
-      </div>
-      <div class="row g-3 mb-5">
-        <div class="col-md-7">
-          <div class="card card-custom h-100">
-            <div class="card-body">
-              <h6 class="text-muted fw-semibold mb-3">Điểm đánh giá TB theo danh mục</h6>
-              <div v-for="(cat, i) in ratingByCategory" :key="i" class="mb-3">
-                <div class="d-flex justify-content-between mb-1">
-                  <span class="fw-bold small">{{ cat.ten_danh_muc }}</span>
-                  <span class="small"><i class="bi bi-star-fill text-warning me-1"></i>{{ cat.avg_rating }} <span class="text-muted">({{ cat.tong_danh_gia }} đánh giá)</span></span>
-                </div>
-                <div class="progress" style="height:8px;border-radius:6px;">
-                  <div class="progress-bar bg-warning" :style="{ width: ((cat.avg_rating / 5) * 100) + '%' }"></div>
-                </div>
-              </div>
-              <div v-if="!ratingByCategory.length" class="text-muted small text-center py-3">Chưa có dữ liệu đánh giá</div>
-            </div>
-          </div>
-        </div>
-        <div class="col-md-5">
-          <div class="card card-custom h-100">
-            <div class="card-body">
-              <h6 class="text-muted fw-semibold mb-3">Phân bổ chất lượng (1⭐ → 5⭐)</h6>
-              <div v-for="star in 5" :key="star" class="d-flex align-items-center gap-2 mb-2">
-                <span class="small fw-bold" style="width:20px;">{{ star }}⭐</span>
-                <div class="progress flex-grow-1" style="height:10px;border-radius:6px;">
-                  <div class="progress-bar" :style="{ width: pct(ratingDistMap[star] || 0, totalRatingCount) + '%', background: ratingStarColors[star - 1] }"></div>
-                </div>
-                <span class="small text-muted" style="width:35px;">{{ ratingDistMap[star] || 0 }}</span>
-              </div>
-              <div class="mt-3 p-2 rounded-3 bg-light text-center">
-                <div class="fs-4 fw-bold text-warning">{{ avgRating }}</div>
-                <div class="small text-muted">Điểm TB toàn hệ thống / 5.0</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </template>
+    </div>
   </div>
 </template>
 
@@ -259,12 +239,11 @@ export default {
   name: 'Reports',
   data() {
     return {
-      loading: false,
+      reportType: 'overview',
       startDate: '',
       endDate: '',
-      reportType: 'overview',
-
-      // Basic
+      exporting: false,
+      statsRaw: null,
       totalTrips: 0,
       totalUsers: 0,
       totalGroups: 0,
@@ -272,123 +251,203 @@ export default {
       activeUsers: 0,
       totalReviews: 0,
       avgRating: 0,
-
-      // 1. Trip status
-      tripStatus: {},
-
-      // 2. Budget
-      budgetSegments: {},
-      budgetFillRate: 0,
-
-      // 3. Preferences
-      userPreferences: [],
-      preferenceDistribution: [],
-
-      // 4. AI efficiency
-      avgPlacesPerTrip: {},
-      avgVisitDuration: 0,
-
-      // 5. Rating by category
-      ratingByCategory: [],
-      ratingDistribution: [],
-
-      prefColors: ['#3874ff','#10b981','#f59e0b','#ec4899','#8b5cf6','#0ea5e9'],
-      ratingStarColors: ['#ef4444','#f97316','#eab308','#22c55e','#3874ff'],
-    };
+      
+      barSeries: [{
+        name: 'Lượt xếp lịch',
+        data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+      }],
+      barChartOptions: {
+        chart: { type: 'bar', fontFamily: 'Inter, sans-serif', toolbar: { show: false } },
+        colors: ['#3874ff', '#10b981'],
+        plotOptions: { bar: { borderRadius: 4, columnWidth: '40%' } },
+        dataLabels: { enabled: false },
+        xaxis: {
+          categories: ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'T9', 'T10', 'T11', 'T12'],
+          axisBorder: { show: false },
+          axisTicks: { show: false },
+          labels: { style: { colors: '#64748b' } }
+        },
+        yaxis: { labels: { style: { colors: '#64748b' } } },
+        grid: { borderColor: '#f1f5f9', strokeDashArray: 4, yaxis: { lines: { show: true } }, xaxis: { lines: { show: false } } }
+      },
+      donutSeries: [],
+      donutOptions: {
+        chart: { type: 'donut', fontFamily: 'Inter, sans-serif' },
+        labels: [],
+        colors: ['#3874ff', '#0ea5e9', '#10b981', '#f59e0b', '#94a3b8', '#ec4899', '#8b5cf6'],
+        plotOptions: { pie: { donut: { size: '75%' } } },
+        dataLabels: { enabled: false },
+        stroke: { show: false },
+        legend: { position: 'bottom', markers: { radius: 12 } }
+      },
+      topPlaces: []
+    }
+  },
+  watch: {
+    '$route.query.type': {
+      immediate: true,
+      handler(newType) {
+        if (newType && ['overview', 'trips', 'users', 'places'].includes(newType)) {
+          this.reportType = newType;
+        } else {
+          this.reportType = 'overview';
+        }
+      }
+    }
   },
   computed: {
-    pageTitle() { return 'Báo cáo Phân tích AI — Du lịch Đà Nẵng'; },
-    pageSubtitle() { return 'Thống kê phục vụ đánh giá hiệu quả hệ thống AI đề xuất lịch trình.'; },
-    budgetSegsDisplay() {
-      return [
-        { label: '< 1 triệu', count: this.budgetSegments.duoi_1tr || 0, color: '#10b981', bg: '#ecfdf5' },
-        { label: '1 – 3 triệu', count: this.budgetSegments.tu_1_3tr || 0, color: '#3874ff', bg: '#eff6ff' },
-        { label: '3 – 5 triệu', count: this.budgetSegments.tu_3_5tr || 0, color: '#f59e0b', bg: '#fffbeb' },
-        { label: '> 5 triệu', count: this.budgetSegments.tren_5tr || 0, color: '#ef4444', bg: '#fef2f2' },
-      ];
+    filteredBarSeries() {
+      if (!this.barSeries || this.barSeries.length === 0) return [];
+      if (this.reportType === 'trips') {
+        return this.barSeries.filter(series => series.name === 'Lượt xếp lịch');
+      }
+      if (this.reportType === 'users') {
+        return this.barSeries.filter(series => series.name === 'Tài khoản đăng ký');
+      }
+      return this.barSeries;
     },
-    maxPrefCount() {
-      return Math.max(...this.userPreferences.map(p => p.so_nguoi_thich), 1);
+    pageTitle() {
+      switch (this.reportType) {
+        case 'trips': return 'Báo cáo Lịch trình & Ngân sách';
+        case 'users': return 'Báo cáo Người dùng đăng ký';
+        case 'places': return 'Báo cáo Địa điểm nổi bật';
+        default: return 'Báo cáo Hoạt động Cốt lõi';
+      }
     },
-    totalPrefCount() {
-      return this.preferenceDistribution.reduce((s, d) => s + (d.so_luong || 0), 0) || 1;
-    },
-    prefDistMap() {
-      const m = {};
-      this.preferenceDistribution.forEach(d => { m[d.muc_do_yeu_thich] = d.so_luong; });
-      return m;
-    },
-    totalRatingCount() {
-      return this.ratingDistribution.reduce((s, d) => s + (d.so_luong || 0), 0) || 1;
-    },
-    ratingDistMap() {
-      const m = {};
-      this.ratingDistribution.forEach(d => { m[d.so_sao] = d.so_luong; });
-      return m;
-    },
+    pageSubtitle() {
+      switch (this.reportType) {
+        case 'trips': return 'Theo dõi mức độ tăng trưởng lượng lịch trình lập ra và kiểm soát ngân sách trung bình.';
+        case 'users': return 'Đo lường mức độ thu hút tài khoản đăng ký mới và tương tác các cộng đồng sinh hoạt.';
+        case 'places': return 'Xác định các tọa độ điểm đến du lịch thịnh hành và xu hướng lựa chọn của du khách.';
+        default: return 'Giám sát chỉ số tương tác, tỷ lệ chuyển đổi và vòng đời phản hồi của toàn bộ hệ thống.';
+      }
+    }
   },
-  mounted() { this.fetchReportsData(); },
+  mounted() {
+    this.fetchReportsData()
+  },
   methods: {
-    pct(val, total) {
-      if (!total || total === 0) return 0;
-      return Math.round((val / total) * 100);
+    getChartTitle() {
+      if (this.reportType === 'trips') return 'Theo dõi Lưu lượng Lịch trình';
+      if (this.reportType === 'users') return 'Biểu đồ Tăng trưởng Nguồn Người dùng';
+      return 'Biểu đồ Tăng trưởng Tổng quan 2026';
+    },
+    formatCurrency(value) {
+      if (!value) return '0 đ';
+      return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(Number(value));
     },
     async fetchReportsData() {
-      this.loading = true;
       try {
-        let url = '/admin/statistics?time_filter=year';
-        if (this.startDate && this.endDate) url += `&start_date=${this.startDate}&end_date=${this.endDate}`;
-        const res = await api.get(url);
-        const data = res.data?.data;
-        if (!data) return;
-
-        this.totalTrips       = data.total_trips || 0;
-        this.totalUsers       = data.total_users || 0;
-        this.totalGroups      = data.total_groups || 0;
-        this.avgBudget        = data.avg_budget || 0;
-        this.activeUsers      = data.active_users || 0;
-        this.totalReviews     = data.total_reviews || 0;
-        this.avgRating        = data.avg_rating || 0;
-
-        this.tripStatus            = data.trip_status || {};
-        this.budgetSegments        = data.budget_segments || {};
-        this.budgetFillRate        = data.budget_fill_rate || 0;
-        this.userPreferences       = data.user_preferences || [];
-        this.preferenceDistribution= data.preference_distribution || [];
-        this.avgPlacesPerTrip      = data.avg_places_per_trip || {};
-        this.avgVisitDuration      = data.avg_visit_duration || 0;
-        this.ratingByCategory      = data.rating_by_category || [];
-        this.ratingDistribution    = data.rating_distribution || [];
-      } catch (e) {
-        console.error('Lỗi tải reports:', e);
+        const token = localStorage.getItem('key_admin')
+        const headers = token ? { Authorization: `Bearer ${token}` } : {}
+        
+        let url = '/admin/statistics?time_filter=year'
+        if (this.startDate && this.endDate) {
+          url += `&start_date=${this.startDate}&end_date=${this.endDate}`
+        }
+        
+        const statsRes = await api.get(url, { headers })
+        const data = statsRes.data?.data
+        
+        if (data) {
+          this.totalTrips = data.total_trips || 0
+          this.totalUsers = data.total_users || 0
+          this.totalGroups = data.total_groups || 0
+          this.avgBudget = data.avg_budget || 0
+          this.activeUsers = data.active_users || 0
+          this.totalReviews = data.total_reviews || 0
+          this.avgRating = data.avg_rating || 0
+          
+          if (data.top_places) {
+            this.topPlaces = data.top_places
+          }
+          
+          if (data.monthly_trips) {
+            this.barSeries = [{
+              name: 'Lượt xếp lịch',
+              data: data.monthly_trips
+            }, {
+              name: 'Tài khoản đăng ký',
+              data: data.monthly_users || []
+            }]
+            
+            if (data.chart_labels) {
+              this.barChartOptions = {
+                ...this.barChartOptions,
+                xaxis: {
+                  ...this.barChartOptions.xaxis,
+                  categories: data.chart_labels
+                }
+              }
+            }
+          }
+          
+          if (data.places_by_category && data.places_by_category.length > 0) {
+            this.donutSeries = data.places_by_category.map(item => item.total)
+            this.donutOptions = {
+              ...this.donutOptions,
+              labels: data.places_by_category.map(item => item.ten_danh_muc)
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Lỗi khi tải dữ liệu reports", error)
+      }
+    },
+    async exportData() {
+      try {
+        this.exporting = true;
+        const token = localStorage.getItem('key_admin');
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        
+        let url = '/admin/statistics/export';
+        
+        const response = await api.get(url, { headers, responseType: 'blob' });
+        
+        const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const link = document.createElement('a');
+        link.href = window.URL.createObjectURL(blob);
+        link.download = `Top_Dia_Diem_Noi_Bat.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(link.href);
+        
+        // Cần import toast từ thư viện nếu có, ví dụ: this.$toast.success(...)
+      } catch (error) {
+        console.error("Lỗi khi xuất dữ liệu", error);
+        alert('Có lỗi xảy ra khi xuất Excel. Vui lòng thử lại sau.');
       } finally {
-        this.loading = false;
+        this.exporting = false;
       }
     }
   }
-};
+}
 </script>
 
 <style scoped>
-.reports-container { animation: fadeIn 0.4s ease-out forwards; }
-@keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+.reports-container {
+  animation: fadeIn 0.4s ease-out forwards;
+}
 
-.section-title { display:flex; align-items:center; padding:0.5rem 0; border-bottom:2px solid #f1f5f9; margin-bottom:1rem; }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
-.stat-card {
-  background:#fff;
-  border-radius:14px;
-  padding:1.25rem 1rem;
-  box-shadow:0 4px 20px rgba(0,0,0,0.04);
-  border:1px solid rgba(0,0,0,0.04);
+.card-custom {
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid rgba(0,0,0,0.05);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
   transition: transform 0.2s, box-shadow 0.2s;
 }
-.stat-card:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,0.08); }
-.stat-icon { width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.3rem;margin-bottom:0.75rem; }
-.stat-value { font-size:2rem;font-weight:800;line-height:1; }
-.stat-label { font-size:0.82rem;color:#64748b;font-weight:500;margin-top:0.25rem; }
-.stat-pct { font-size:0.78rem;color:#94a3b8;margin-top:0.15rem; }
 
-.card-custom { background:#fff;border-radius:16px;border:1px solid rgba(0,0,0,0.05);box-shadow:0 4px 20px rgba(0,0,0,0.03);transition:transform 0.2s,box-shadow 0.2s; }
-.card-custom:hover { transform:translateY(-2px);box-shadow:0 10px 25px rgba(0,0,0,0.06); }
+.card-custom:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.06);
+}
+
+.bg-primary { background-color: #3874ff !important; }
+.text-primary { color: #3874ff !important; }
 </style>

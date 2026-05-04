@@ -197,6 +197,12 @@
             Hệ thống đã sắp xếp <strong>{{ tongSoDiaDiem }} địa điểm</strong> vào
             <strong>{{ lichTrinhTheoNgay.length }} ngày</strong>. Bạn có thể điều chỉnh thứ tự và thêm ghi chú.
           </p>
+          <!-- Chú ý: chi phí chưa bao gồm khách sạn -->
+          <div class="alert-hotel-notice mt-3">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <span><strong>Chú ý:</strong> Chi phí trên chưa bao gồm tiền khách sạn / chỗ ở. Vui lòng tính thêm khi lập ngân sách.</span>
+          </div>
+
           <div class="alert alert-success d-inline-flex align-items-center py-2 px-3 mt-2 mb-0"
             v-if="form.ngan_sach_du_kien > 0" style="border-radius: 20px;">
             <i class="bi bi-piggy-bank me-2 fs-5"></i>
@@ -213,7 +219,7 @@
         <!-- Budget tracker -->
         <div class="budget-tracker">
           <div class="budget-info">
-            <span>Chi phí vé ước tính</span>
+            <span>Chi phí ước tính</span>
             <strong>{{ formatCurrency(tongGiaVe) }}</strong>
           </div>
           <div v-if="form.ngan_sach_du_kien > 0" class="budget-info">
@@ -275,8 +281,11 @@
                         <span class="wib-label">{{ getWeatherAtTime(activeDayTab - 1, item.gio_bat_dau || item.gio).label }}</span>
                       </div>
                     </div>
-                    <div class="tc-order-btns">
-                      <button class="btn-remove" @click="removeItem(activeDayTab - 1, idx)" title="Xóa">
+                    <div class="tc-order-btns gap-2" style="display: flex; flex-direction: column;">
+                      <button class="btn btn-sm btn-outline-primary rounded-circle shadow-sm" @click="swapPlace(activeDayTab - 1, idx)" title="Đổi địa điểm khác" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
+                        <i class="bi bi-arrow-repeat"></i>
+                      </button>
+                      <button class="btn btn-sm btn-outline-danger rounded-circle shadow-sm" @click="removeItem(activeDayTab - 1, idx)" title="Xóa địa điểm này" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;">
                         <i class="bi bi-trash3"></i>
                       </button>
                     </div>
@@ -774,6 +783,116 @@ export default {
         this.selectedDiaDiem.push(dd);
       } else {
         this.selectedDiaDiem.splice(idx, 1);
+      }
+    },
+
+    async swapPlace(dayIdx, itemIdx) {
+      const item = this.lichTrinhTheoNgay[dayIdx][itemIdx];
+      if (!item) return;
+
+      const btn = event?.currentTarget;
+      const originalHTML = btn ? btn.innerHTML : '';
+      if (btn && btn.tagName === 'BUTTON') {
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        btn.disabled = true;
+      }
+
+      try {
+        // Mô phỏng loading ngắn
+        await new Promise(r => setTimeout(r, 400));
+
+        const currentPlace = this.allDiaDiem.find(d => d.id === item.id_dia_diem);
+        if (!currentPlace) {
+          this.$toast?.error('Không tìm thấy thông tin địa điểm hiện tại.');
+          return;
+        }
+
+        const usedIds = this.lichTrinhTheoNgay.flat().map(i => i.id_dia_diem);
+
+        // Lọc ứng viên: cùng danh mục, chưa có trong lịch trình
+        const candidates = this.allDiaDiem.filter(d =>
+          d.id_danh_muc === currentPlace.id_danh_muc &&
+          !usedIds.includes(d.id)
+        );
+
+        if (candidates.length === 0) {
+          this.$toast?.error('Không tìm thấy địa điểm phù hợp để thay thế.');
+          return;
+        }
+
+        // ── Thuật toán Haversine + Price score (giống backend) ──────────
+        const haversine = (lat1, lng1, lat2, lng2) => {
+          if (!lat1 || !lng1 || !lat2 || !lng2) return 9999;
+          const R = 6371;
+          const dLat = (lat2 - lat1) * Math.PI / 180;
+          const dLng = (lng2 - lng1) * Math.PI / 180;
+          const a = Math.sin(dLat/2)**2 +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLng/2)**2;
+          return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        };
+
+        const lat1  = parseFloat(currentPlace.vi_do)  || 0;
+        const lng1  = parseFloat(currentPlace.kinh_do) || 0;
+        const gia1  = parseFloat(currentPlace.gia_ve)  || 0;
+
+        const scored = candidates.map(d => {
+          const lat2 = parseFloat(d.vi_do)  || 0;
+          const lng2 = parseFloat(d.kinh_do) || 0;
+          const gia2 = parseFloat(d.gia_ve)  || 0;
+          const dist = haversine(lat1, lng1, lat2, lng2);
+          const giaDiff = Math.abs(gia2 - gia1) / Math.max(1, gia1);
+          // Trọng số: khoảng cách 70%, giá 30% — giống backend
+          return { place: d, score: dist * 0.7 + giaDiff * 0.3, dist };
+        }).sort((a, b) => a.score - b.score);
+
+        // Lấy top 3 gần nhất rồi random 1 (tránh luôn trả về cùng 1 địa điểm)
+        const top3 = scored.slice(0, 3);
+        const chosen = top3[Math.floor(Math.random() * top3.length)].place;
+        // ────────────────────────────────────────────────────────────────
+
+        // Giữ nguyên giờ bắt đầu, chỉ cập nhật thời lượng từ địa điểm mới
+        const gioBatDau = item.gio_bat_dau || item.gio || '08:00';
+        const newDur = parseInt(chosen.thoi_gian_tham_quan_du_kien) || parseInt(item.thoi_luong_phut) || 60;
+        const toMin = t => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
+        const fmt   = m => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+        const gioKetThuc = fmt(toMin(gioBatDau) + newDur);
+
+        // Patch vào lichTrinhTheoNgay
+        this.lichTrinhTheoNgay[dayIdx].splice(itemIdx, 1, {
+          ...item,
+          id_dia_diem:     chosen.id,
+          ten_dia_diem:    chosen.ten_dia_diem,
+          dia_chi:         chosen.dia_chi,
+          vi_do:           chosen.vi_do,
+          kinh_do:         chosen.kinh_do,
+          hinh_anh:        chosen.hinh_anh || chosen.hinh_anh_chinh,
+          gia_ve:          chosen.gia_ve,
+          thoi_luong_phut: newDur,
+          gio_bat_dau:     gioBatDau,
+          gio:             gioBatDau,
+          gio_ket_thuc:    gioKetThuc,
+          thoi_gian_tham_quan_du_kien: chosen.thoi_gian_tham_quan_du_kien,
+        });
+
+        // Đồng bộ selectedDiaDiem (Bước 2)
+        const selIdx = this.selectedDiaDiem.findIndex(d => d.id === currentPlace.id);
+        if (selIdx !== -1) this.selectedDiaDiem.splice(selIdx, 1, chosen);
+
+        // Tính lại giờ các item tiếp theo trong ngày
+        this.recalcDayTimes(dayIdx);
+        this.$nextTick(() => this.renderMapForDay(dayIdx));
+
+        this.$toast?.success(`Đã đổi sang "${chosen.ten_dia_diem}" (cách ${top3[0].dist.toFixed(1)} km)!`);
+
+      } catch (error) {
+        this.$toast?.error('Lỗi khi đổi địa điểm!');
+        console.error(error);
+      } finally {
+        if (btn && btn.tagName === 'BUTTON') {
+          btn.innerHTML = originalHTML;
+          btn.disabled = false;
+        }
       }
     },
 
@@ -2089,7 +2208,33 @@ label {
   background: linear-gradient(90deg, #f43f5e, #fb923c);
 }
 
-/* ──────────── Day tabs ──────────── */
+/* \u2500\u2500\u2500 Hotel notice alert \u2500\u2500\u2500 */
+.alert-hotel-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: linear-gradient(135deg, #fff7ed, #fef3c7);
+  border: 1.5px solid #f59e0b;
+  border-left: 5px solid #f59e0b;
+  border-radius: 12px;
+  padding: 0.85rem 1.2rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+  color: #78350f;
+  font-weight: 500;
+  box-shadow: 0 2px 10px rgba(245,158,11,0.15);
+}
+.alert-hotel-notice i {
+  font-size: 1.3rem;
+  color: #f59e0b;
+  flex-shrink: 0;
+}
+.alert-hotel-notice strong {
+  color: #92400e;
+  font-size: 1rem;
+}
+
+/* \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 Day tabs \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
 .day-tabs {
   display: flex;
   gap: 0.55rem;

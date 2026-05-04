@@ -161,33 +161,95 @@ class LichTrinhDiaDiemController extends Controller
 
         $chuyenDiId = $lichTrinh->id_chuyen_di;
         $diaDiemHienTai = DiaDiem::find($lichTrinh->id_dia_diem);
+        if (!$diaDiemHienTai) {
+            return response()->json(['status' => false, 'message' => 'Không tìm thấy địa điểm hiện tại.'], 404);
+        }
 
         // 2. Lấy danh sách ID các địa điểm ĐÃ CÓ trong chuyến đi để tránh trùng lặp
         $diaDiemDaCo = LichTrinhDiaDiem::where('id_chuyen_di', $chuyenDiId)
             ->whereNotNull('id_dia_diem')
             ->pluck('id_dia_diem')->toArray();
 
-        // 3. Tìm các địa điểm thay thế: Cùng danh mục, không nằm trong danh sách đã có
-        $diaDiemThayThe = DiaDiem::where('loai_dia_diem', $diaDiemHienTai->loai_dia_diem)
+        // 3. Tìm các địa điểm thay thế cùng danh mục, chưa có trong chuyến đi
+        $candidates = DiaDiem::where('loai_dia_diem', $diaDiemHienTai->loai_dia_diem)
             ->whereNotIn('id', $diaDiemDaCo)
-            ->inRandomOrder() // Lấy ngẫu nhiên 1 cái để có sự đa dạng
-            ->first();
+            ->get();
 
-        if (!$diaDiemThayThe) {
+        if ($candidates->isEmpty()) {
             return response()->json([
                 'status' => false,
                 'message' => 'Không tìm thấy địa điểm phù hợp để thay thế.'
             ], 404);
         }
 
-        // 4. Đổi địa điểm
-        $lichTrinh->id_dia_diem = $diaDiemThayThe->id;
+        // 4. Ưu tiên theo khoảng cách (nếu có tọa độ) rồi theo giá vé tương đương
+        $lat1 = (float) $diaDiemHienTai->vi_do;
+        $lng1 = (float) $diaDiemHienTai->kinh_do;
+        $giaHienTai = (float) ($diaDiemHienTai->gia_ve ?? 0);
+
+        $scored = $candidates->map(function ($d) use ($lat1, $lng1, $giaHienTai) {
+            $lat2 = (float) $d->vi_do;
+            $lng2 = (float) $d->kinh_do;
+
+            // Haversine distance (km)
+            $distScore = 9999;
+            if ($lat1 && $lng1 && $lat2 && $lng2) {
+                $R = 6371;
+                $dLat = deg2rad($lat2 - $lat1);
+                $dLng = deg2rad($lng2 - $lng1);
+                $a = sin($dLat/2)**2 + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng/2)**2;
+                $distScore = $R * 2 * atan2(sqrt($a), sqrt(1 - $a));
+            }
+
+            // Giá vé: ưu tiên tương đương (chênh lệch càng nhỏ càng tốt)
+            $gia = (float) ($d->gia_ve ?? 0);
+            $giaDiff = abs($gia - $giaHienTai);
+
+            // Score tổng hợp: distance (trọng số cao) + giá (trọng số thấp)
+            $score = $distScore * 0.7 + ($giaDiff / max(1, $giaHienTai)) * 0.3;
+
+            return ['place' => $d, 'score' => $score, 'distance_km' => round($distScore, 2)];
+        })
+        ->sortBy('score');
+
+        // Lấy top 3 gần nhất, rồi random 1 cái để tránh luôn trả về cùng 1 địa điểm
+        $top3 = $scored->take(3)->values();
+        $chosen = $top3[rand(0, $top3->count() - 1)]['place'];
+
+        // 5. Đổi địa điểm, giữ nguyên giờ bắt đầu – chỉ cập nhật thời lượng theo địa điểm mới
+        $lichTrinh->id_dia_diem = $chosen->id;
+        $newDuration = $chosen->thoi_gian_tham_quan_du_kien ?? $lichTrinh->thoi_luong_phut ?? 60;
+        $lichTrinh->thoi_luong_phut = $newDuration;
+
+        // Tính lại gio_ket_thuc từ gio_bat_dau + thoi_luong_phut mới
+        if ($lichTrinh->gio_bat_dau) {
+            $start = \Carbon\Carbon::createFromFormat('H:i', substr($lichTrinh->gio_bat_dau, 0, 5));
+            $lichTrinh->gio_ket_thuc = $start->copy()->addMinutes($newDuration)->format('H:i');
+        }
+
         $lichTrinh->save();
 
+        // 6. Trả về đầy đủ dữ liệu địa điểm mới cho frontend đồng bộ
         return response()->json([
-            'status' => true,
+            'status'  => true,
             'message' => 'Thay đổi địa điểm thành công',
-            'data' => $lichTrinh
+            'data'    => [
+                'id'                         => $lichTrinh->id,
+                'id_dia_diem'                => $chosen->id,
+                'ten_dia_diem'               => $chosen->ten_dia_diem,
+                'dia_chi'                    => $chosen->dia_chi,
+                'vi_do'                      => (float) $chosen->vi_do,
+                'kinh_do'                    => (float) $chosen->kinh_do,
+                'gia_ve'                     => $chosen->gia_ve,
+                'hinh_anh'                   => $chosen->image,
+                'danh_gia_trung_binh'        => $chosen->danh_gia_trung_binh,
+                'loai_dia_diem'              => $chosen->loai_dia_diem,
+                'thoi_gian_tham_quan_du_kien' => $chosen->thoi_gian_tham_quan_du_kien,
+                'gio_bat_dau'                => $lichTrinh->gio_bat_dau,
+                'gio_ket_thuc'               => $lichTrinh->gio_ket_thuc,
+                'thoi_luong_phut'            => $lichTrinh->thoi_luong_phut,
+                'distance_km'                => $top3->first()['distance_km'] ?? null,
+            ]
         ]);
     }
 

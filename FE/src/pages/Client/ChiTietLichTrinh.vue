@@ -32,9 +32,8 @@
             <button v-if="trip.is_leader && isFinalized" class="btn btn-warning rounded-pill px-4 py-2 border-0 fw-bold shadow-sm d-flex align-items-center" @click="openUnfinalizeModal">
               <i class="bi bi-unlock-fill me-2"></i> Mở lại để sửa
             </button>
-            <button class="btn btn-outline-primary rounded-pill px-3 py-2 fw-bold d-flex align-items-center" @click="exportExcel" :disabled="exportingExcel">
-              <span v-if="exportingExcel" class="spinner-border spinner-border-sm me-2"></span>
-              <i v-else class="bi bi-file-earmark-excel-fill me-2 text-success"></i> Xuất Excel
+            <button class="btn btn-outline-primary rounded-pill px-3 py-2 fw-bold d-flex align-items-center" @click="exportPDF">
+              <i class="bi bi-file-earmark-pdf-fill me-2"></i> Xuất PDF
             </button>
             <!-- AI Optimization Button -->
             <button v-if="!isFinalized && (trip.is_member || trip.is_owner)" 
@@ -83,14 +82,20 @@
             </div>
         </div>
 
+        <!-- Chú ý: chi phí chưa bao gồm khách sạn -->
+        <div class="alert-hotel-notice">
+          <i class="bi bi-exclamation-triangle-fill"></i>
+          <span><strong>Chú ý:</strong> Chi phí trên chưa bao gồm tiền khách sạn / chỗ ở. Vui lòng tính thêm khi lập ngân sách.</span>
+        </div>
+
         <!-- Budget tracker -->
         <div class="budget-tracker">
           <div class="budget-info">
-            <span>Tổng chi phí (Vé + Phát sinh)</span>
+            <span>Tổng chi phí (Dự kiến + Phát sinh)</span>
             <strong>{{ formatCurrency(tongChiPhiDuKien) }}</strong>
           </div>
           <div class="budget-info">
-            <span>Giá vé dự kiến</span>
+            <span>Chi phí dự kiến</span>
             <strong>{{ formatCurrency(tongGiaVe) }}</strong>
           </div>
           <div v-if="trip.ngan_sach > 0" class="budget-info">
@@ -143,6 +148,12 @@
                       <p v-if="item.gia_ve > 0">
                         <i class="bi bi-ticket-perforated me-1"></i>{{ formatCurrency(item.gia_ve) }} / người
                       </p>
+                      <!-- Weather badge theo giờ -->
+                      <div v-if="getWeatherAtTime(activeDayTab - 1, item.gio_bat_dau || item.gio)" class="weather-inline-badge">
+                        <span class="wib-icon">{{ getWeatherAtTime(activeDayTab - 1, item.gio_bat_dau || item.gio).icon }}</span>
+                        <span class="wib-temp">{{ getWeatherAtTime(activeDayTab - 1, item.gio_bat_dau || item.gio).temp }}°C</span>
+                        <span class="wib-label">{{ getWeatherAtTime(activeDayTab - 1, item.gio_bat_dau || item.gio).label }}</span>
+                      </div>
                     </div>
                     <!-- Action buttons (only when not finalized and is member/owner) -->
                     <div v-if="!isFinalized && (trip.is_member || trip.is_owner)" class="ms-auto align-self-start d-flex flex-column gap-1">
@@ -571,7 +582,6 @@ export default {
       mapLayers: [],
       mapRouteLine: null,
       routeInfo: { distance: '', duration: '' },
-      exportingExcel: false,
       loadingAI: false,
       socketChannel: null,
 
@@ -594,6 +604,11 @@ export default {
         filtered: [],
         addingId: null,
       },
+
+      // ─── Thời tiết ───
+      weatherForecast: [],
+      weatherHourly: {}, // { 'YYYY-MM-DD': { 'HH': { icon, temp, label } } }
+      loadingWeather: false,
     };
   },
 
@@ -677,6 +692,82 @@ export default {
   },
 
   methods: {
+    // \u2500\u2500\u2500 Th\u1eddi ti\u1ebft \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+    async autoLoadWeather() {
+      if (!this.trip?.ngay_bat_dau) return;
+      this.loadingWeather = true;
+      // ChuyenDi model kh\u00f4ng c\u00f3 ngay_ket_thuc — t\u00ednh t\u1eeb ngay_bat_dau + so_ngay - 1
+      const startDate = String(this.trip.ngay_bat_dau).substring(0, 10);
+      const soNgay    = parseInt(this.trip.so_ngay) || 1;
+      const endD      = new Date(startDate + 'T00:00:00');
+      endD.setDate(endD.getDate() + soNgay - 1);
+      const endDate   = `${endD.getFullYear()}-${String(endD.getMonth()+1).padStart(2,'0')}-${String(endD.getDate()).padStart(2,'0')}`;
+      const result = await this.fetchWeatherData(startDate, endDate);
+      this.weatherForecast = result.daily;
+      this.weatherHourly   = result.hourly;
+      this.loadingWeather = false;
+    },
+
+    async fetchWeatherData(startDate, endDate) {
+      try {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=16.0544&longitude=108.2022`
+          + `&daily=weathercode,temperature_2m_max,precipitation_sum`
+          + `&hourly=temperature_2m,weathercode`
+          + `&timezone=Asia%2FHo_Chi_Minh`
+          + `&start_date=${startDate}&end_date=${endDate}`;
+        const res = await axiosExternal.get(url);
+        const json = res.data;
+        if (!json.daily) return { daily: [], hourly: {} };
+
+        const getCondition = (code) => {
+          if (code === 0 || code === 1) return 'sunny';
+          if (code <= 3) return 'partly_cloudy';
+          if (code <= 67) return 'rain';
+          return 'cloudy';
+        };
+
+        const daily = json.daily.time.map((date, i) => ({
+          date,
+          condition: getCondition(json.daily.weathercode[i]),
+          temp_max: json.daily.temperature_2m_max[i],
+          precipitation: json.daily.precipitation_sum[i],
+        }));
+
+        const hourly = {};
+        if (json.hourly) {
+          json.hourly.time.forEach((isoTime, i) => {
+            const [dateStr, timeStr] = isoTime.split('T');
+            const hourKey = timeStr.substring(0, 2);
+            if (!hourly[dateStr]) hourly[dateStr] = {};
+            const condition = getCondition(json.hourly.weathercode[i]);
+            const iconMap  = { sunny: '\u2600\ufe0f', partly_cloudy: '\u26c5', rain: '\ud83c\udf27\ufe0f', cloudy: '\u2601\ufe0f' };
+            const labelMap = { sunny: 'N\u1eafng', partly_cloudy: '\u00CDt m\u00e2y', rain: 'M\u01b0a', cloudy: 'Nhi\u1ec1u m\u00e2y' };
+            hourly[dateStr][hourKey] = {
+              icon : iconMap[condition]  || '\ud83c\udf24\ufe0f',
+              label: labelMap[condition] || '',
+              temp : Math.round(json.hourly.temperature_2m[i]),
+              condition,
+            };
+          });
+        }
+        return { daily, hourly };
+      } catch (e) {
+        console.warn('Kh\u00f4ng l\u1ea5y \u0111\u01b0\u1ee3c d\u1eef li\u1ec7u th\u1eddi ti\u1ebft:', e.message);
+        return { daily: [], hourly: {} };
+      }
+    },
+
+    getWeatherAtTime(dayIndex, timeStr) {
+      if (!timeStr || !this.trip?.ngay_bat_dau) return null;
+      // Dùng string cắt để tránh timezone drift khi dùng new Date()
+      const baseDate = String(this.trip.ngay_bat_dau).substring(0, 10);
+      const d = new Date(baseDate + 'T00:00:00'); // parse as local time
+      d.setDate(d.getDate() + dayIndex);
+      const dateKey = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      const hourKey = String(timeStr).substring(0, 2);
+      return this.weatherHourly?.[dateKey]?.[hourKey] || null;
+    },
+
     openFinalizeModal() {
       this.scheduleConfirmModal = {
         show: true,
@@ -743,6 +834,8 @@ export default {
           this.renderMapForDay(this.activeDayTab - 1);
           this.waitAndInitSortable();
         });
+        // Tải thời tiết sau khi có dữ liệu chuyến đi
+        this.autoLoadWeather();
       }
     },
 
@@ -1028,24 +1121,52 @@ export default {
             this.$toast.error('Không thể đổi địa điểm này.');
             return;
         }
-        
+
+        const btn = event?.currentTarget;
+        const originalHTML = btn ? btn.innerHTML : '';
+        if (btn && btn.tagName === 'BUTTON') {
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+            btn.disabled = true;
+        }
+
         try {
-            const btn = document.activeElement;
-            const originalHTML = btn ? btn.innerHTML : '';
-            if(btn && btn.tagName === 'BUTTON') btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-            
             const res = await api.post(`/lich-trinh-dia-diems/${item.id}/swap`);
             const json = res.data;
             if (json.status) {
+                const newData = json.data;
+                // Patch trực tiếp vào lichTrinhTheoNgay — giữ nguyên giờ từ backend
+                for (let dayIdx = 0; dayIdx < this.lichTrinhTheoNgay.length; dayIdx++) {
+                    const idx = this.lichTrinhTheoNgay[dayIdx].findIndex(i => i.id === item.id);
+                    if (idx !== -1) {
+                        this.lichTrinhTheoNgay[dayIdx].splice(idx, 1, {
+                            ...this.lichTrinhTheoNgay[dayIdx][idx],
+                            id_dia_diem:     newData.id_dia_diem,
+                            ten_dia_diem:    newData.ten_dia_diem,
+                            dia_chi:         newData.dia_chi,
+                            vi_do:           newData.vi_do,
+                            kinh_do:         newData.kinh_do,
+                            gia_ve:          newData.gia_ve,
+                            hinh_anh:        newData.hinh_anh,
+                            gio_bat_dau:     newData.gio_bat_dau,
+                            gio_ket_thuc:    newData.gio_ket_thuc,
+                            thoi_luong_phut: newData.thoi_luong_phut,
+                        });
+                        this.$nextTick(() => this.renderMapForDay(dayIdx));
+                        break;
+                    }
+                }
                 this.$toast.success('Đã thay đổi địa điểm mới!');
-                await this.fetchTripData(); // Tải lại chuyến đi
             } else {
                 this.$toast.error(json.message || 'Không tìm thấy địa điểm thay thế!');
-                if(btn && btn.tagName === 'BUTTON') btn.innerHTML = originalHTML;
             }
         } catch (error) {
             this.$toast.error('Lỗi khi đổi địa điểm!');
             console.error(error);
+        } finally {
+            if (btn && btn.tagName === 'BUTTON') {
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
+            }
         }
     },
 
@@ -1249,99 +1370,40 @@ export default {
       }
     },
 
-    async exportExcel() {
-      if (!this.trip) return;
-      this.exportingExcel = true;
-
-      try {
-        // Đảm bảo SheetJS đã được tải
-        if (!window.XLSX) {
-          this.$toast.info('Vui lòng chờ vài giây rồi thử lại...');
-          await new Promise(resolve => setTimeout(resolve, 1500));
-          if (!window.XLSX) {
-            this.$toast.error('Không thể tải thư viện xuất Excel. Vui lòng thử lại.');
-            return;
-          }
-        }
-
-        const XLSX = window.XLSX;
-        const wb = XLSX.utils.book_new();
-
-        // === Sheet 1: Thông tin chuyến đi ===
-        const tripInfo = [
-          ['THÔNG TIN CHUYẾN ĐI', ''],
-          ['Tên chuyến đi', this.trip.ten_chuyen_di || ''],
-          ['Ngày bắt đầu', this.formatDateFull(this.trip.ngay_bat_dau)],
-          ['Thời gian', this.formatDuration(this.trip.so_ngay)],
-          ['Số thành viên', this.trip.so_nguoi || 1],
-          ['Ngân sách dự kiến', this.formatCurrency(this.trip.ngan_sach)],
-          ['Tổng giá vé dự kiến', this.formatCurrency(this.tongGiaVe)],
-          ['Tổng chi phí phát sinh', this.formatCurrency(this.tongChiPhiPhatSinh)],
-          ['Tổng chi phí', this.formatCurrency(this.tongChiPhiDuKien)],
-          ['Trạng thái', this.isFinalized ? 'Đã chốt' : 'Đang lên kế hoạch'],
-        ];
-        const ws1 = XLSX.utils.aoa_to_sheet(tripInfo);
-        ws1['!cols'] = [{ wch: 28 }, { wch: 40 }];
-        XLSX.utils.book_append_sheet(wb, ws1, 'Thông tin');
-
-        // === Sheet 2: Lịch trình theo ngày ===
-        const scheduleData = [['NGÀY', 'NGÀY/GIờ', 'THỜI GIAN BẮT ĐẦU', 'THỜI GIAN KẾT THÚC', 'THỜI LƯỢNG', 'ĐỊA ĐIỂM', 'ĐỊA CHỈ', 'GIÁ VÉ (VNĐ)', 'GHI CHÚ']];
-        this.lichTrinhTheoNgay.forEach((day, di) => {
-          if (day.length === 0) {
-            scheduleData.push([`Ngày ${di + 1}`, this.formatDateDate(this.trip.ngay_bat_dau, di), '', '', '', 'Chưa có lịch trình', '', '', '']);
-          } else {
-            day.forEach((item, idx) => {
-              scheduleData.push([
-                idx === 0 ? `Ngày ${di + 1}` : '',
-                idx === 0 ? this.formatDateDate(this.trip.ngay_bat_dau, di) : '',
-                item.gio_bat_dau || item.gio || '',
-                item.gio_ket_thuc || '',
-                item.thoi_luong_phut ? `${item.thoi_luong_phut} phút` : '',
-                item.ten_dia_diem || '',
-                item.dia_chi || 'Đà Nẵng',
-                Number(item.gia_ve) || 0,
-                item.ghi_chu || '',
-              ]);
-            });
-          }
-        });
-        const ws2 = XLSX.utils.aoa_to_sheet(scheduleData);
-        ws2['!cols'] = [
-          { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 },
-          { wch: 30 }, { wch: 30 }, { wch: 16 }, { wch: 30 }
-        ];
-        XLSX.utils.book_append_sheet(wb, ws2, 'Lịch trình');
-
-        // === Sheet 3: Chi phí phát sinh ===
-        if (this.incurredExpenses.length > 0) {
-          const expData = [['STT', 'NỘI DUNG', 'LOẠI CHI PHÍ', 'NGÀY CHI', 'SỐ TIỀN (VNĐ)', 'NGƯỜI THỰC HIỆN']];
-          this.incurredExpenses.forEach((exp, i) => {
-            expData.push([
-              i + 1,
-              exp.noi_dung || '',
-              exp.loai_chi_phi || 'Khác',
-              this.formatExpenseDate(exp.ngay_chi),
-              Number(exp.tong_chi_phi) || 0,
-              exp.nguoi_tra?.ten || 'Không rõ',
-            ]);
-          });
-          expData.push(['', 'TỔNG CỘNG', '', '', this.tongChiPhiPhatSinh, '']);
-          const ws3 = XLSX.utils.aoa_to_sheet(expData);
-          ws3['!cols'] = [{ wch: 6 }, { wch: 30 }, { wch: 18 }, { wch: 14 }, { wch: 18 }, { wch: 22 }];
-          XLSX.utils.book_append_sheet(wb, ws3, 'Chi phí phát sinh');
-        }
-
-        // Xuất file
-        const fileName = `LichTrinh_${(this.trip.ten_chuyen_di || 'chuyen-di').replace(/\s+/g, '_')}.xlsx`;
-        XLSX.writeFile(wb, fileName);
-        this.$toast.success('Xuất Excel thành công!');
-
-      } catch (err) {
-        console.error('Lỗi xuất Excel:', err);
-        this.$toast.error('Không thể xuất file Excel. Vui lòng thử lại.');
-      } finally {
-        this.exportingExcel = false;
+    exportPDF() {
+      if (!window.html2pdf) {
+        this.$toast.warning('Tính năng xuất PDF đang tải, vui lòng thử lại sau vài giây.');
+        return;
       }
+      const hiddenEl = document.getElementById('pdf-summary-content');
+      if (!hiddenEl) return;
+      
+      // Clone element và hiển thị nó ra một div ảo ngoài màn hình để render PDF
+      const wrapper = document.createElement('div');
+      wrapper.style.position = 'absolute';
+      wrapper.style.left = '-9999px';
+      wrapper.style.top = '0';
+      wrapper.style.width = '800px';
+      wrapper.style.background = '#fff';
+      document.body.appendChild(wrapper);
+      
+      const element = hiddenEl.cloneNode(true);
+      element.style.display = 'block';
+      wrapper.appendChild(element);
+      
+      this.$toast.info('Đang tạo file PDF tóm tắt, vui lòng đợi...', { timeout: 3000 });
+      
+      const opt = {
+        margin: [10, 10, 10, 10],
+        filename: `Tom-Tat-Lich-Trinh-${this.trip.ten_chuyen_di}.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
+      
+      window.html2pdf().set(opt).from(element).save().then(() => {
+          document.body.removeChild(wrapper);
+      });
     },
 
     confettiStyle(n) {
@@ -1901,6 +1963,48 @@ export default {
   0%, 100% { transform: rotate(0deg); }
   25% { transform: rotate(-12deg); }
   75% { transform: rotate(12deg); }
+}
+
+/* \u2500\u2500\u2500 Weather Inline Badge \u2500\u2500\u2500 */
+.weather-inline-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 20px;
+  background: rgba(14, 165, 233, 0.08);
+  border: 1px solid rgba(14, 165, 233, 0.22);
+  font-size: 0.78rem;
+}
+.wib-icon  { font-size: 1rem; line-height: 1; }
+.wib-temp  { font-weight: 700; color: #0369a1; }
+.wib-label { color: #475569; }
+
+/* \u2500\u2500\u2500 Hotel notice alert \u2500\u2500\u2500 */
+.alert-hotel-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: linear-gradient(135deg, #fff7ed, #fef3c7);
+  border: 1.5px solid #f59e0b;
+  border-left: 5px solid #f59e0b;
+  border-radius: 12px;
+  padding: 0.85rem 1.2rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.95rem;
+  color: #78350f;
+  font-weight: 500;
+  box-shadow: 0 2px 10px rgba(245,158,11,0.15);
+}
+.alert-hotel-notice i {
+  font-size: 1.3rem;
+  color: #f59e0b;
+  flex-shrink: 0;
+}
+.alert-hotel-notice strong {
+  color: #92400e;
+  font-size: 1rem;
 }
 
 </style>
