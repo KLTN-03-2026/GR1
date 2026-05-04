@@ -4,6 +4,7 @@ use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use App\Models\DiaDiem;
 use App\Services\SerpApiService;
+use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -147,3 +148,9 @@ Artisan::command('serp:update-details {--id= : ID địa điểm cụ thể} {--
     $this->newLine(2);
     $this->info("✅ Hoàn tất! Đã cập nhật {$success}/{$total} địa điểm.");
 })->purpose('Tự động lấy thông tin chi tiết từ Google Maps (SerpApi) cho địa điểm');
+
+Schedule::command('itinerary:auto-complete')
+    ->dailyAt('00:05')
+    ->withoutOverlapping()
+    ->runInBackground();
+

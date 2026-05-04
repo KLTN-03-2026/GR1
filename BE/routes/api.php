@@ -130,6 +130,8 @@ Route::prefix('admin')->middleware('auth:sanctum')->group(function () {
     Route::middleware('check_permission:report_view,dashboard_view')->group(function () {
         Route::get('/statistics', [AdminController::class, 'getStatistics']);
         Route::get('/statistics/export', [AdminController::class, 'xuatExcel']);
+        Route::get('/ai-statistics', [AdminController::class, 'getAiStatistics']);
+        Route::get('/ai-statistics/export', [AdminController::class, 'xuatExcelAi']);
     });
 
     // Quản lý đánh giá hệ thống (Admin)
@@ -231,10 +233,14 @@ Route::prefix('hinh-anh-dia-diems')->group(function () {
 // Danh Gias Routes
 Route::prefix('danh-gias')->group(function () {
     Route::get('/', [DanhGiaController::class, 'index']);
-    Route::post('/', [DanhGiaController::class, 'store']);
     Route::get('/{danh_gia}', [DanhGiaController::class, 'show']);
-    Route::put('/{danh_gia}', [DanhGiaController::class, 'update']);
-    Route::delete('/{danh_gia}', [DanhGiaController::class, 'destroy']);
+});
+
+// Chỉ Admin/NV có quyền tương ứng mới được Duyệt/Ẩn/Xóa đánh giá
+Route::prefix('danh-gias')->middleware('auth:sanctum')->group(function () {
+    Route::put('/{danh_gia}', [DanhGiaController::class, 'update'])->middleware('check_permission:review_approve');
+    Route::delete('/{danh_gia}', [DanhGiaController::class, 'destroy'])->middleware('check_permission:review_delete');
+    Route::post('/', [DanhGiaController::class, 'store']); // Đăng đánh giá
 });
 
 // So Thich Nguoi Dungs Routes

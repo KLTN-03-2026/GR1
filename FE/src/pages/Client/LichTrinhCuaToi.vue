@@ -42,8 +42,8 @@
             <div class="trip-icon-wrap">
               <i class="bi bi-airplane-fill"></i>
             </div>
-            <div class="trip-card-status" :class="trip.tinh_trang == 1 ? 'active' : 'done'">
-              {{ trip.tinh_trang == 1 ? 'Đang lên kế hoạch' : 'Hoàn thành' }}
+            <div class="trip-card-status" :class="getStatusClass(trip.trang_thai)">
+              {{ getStatusText(trip.trang_thai) }}
             </div>
           </div>
 
@@ -287,6 +287,22 @@ export default {
       return `${soNgay} ngày ${Math.max(0, soNgay - 1)} đêm`;
     },
 
+    getStatusClass(status) {
+      if (status == 0) return 'cancelled';
+      if (status == 1) return 'planning';
+      if (status == 2) return 'ongoing';
+      if (status == 3) return 'done';
+      return 'planning';
+    },
+
+    getStatusText(status) {
+      if (status == 0) return 'Đã hủy';
+      if (status == 1) return 'Đang lên kế hoạch';
+      if (status == 2) return 'Đang đi';
+      if (status == 3) return 'Hoàn thành';
+      return 'Không xác định';
+    },
+
     confirmDelete(trip) {
       this.deleteTarget = trip;
     },
@@ -481,7 +497,12 @@ export default {
   border-radius: 999px;
 }
 
-.trip-card-status.active {
+.trip-card-status.planning {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.trip-card-status.ongoing {
   background: #dcfce7;
   color: #15803d;
 }
@@ -489,6 +510,11 @@ export default {
 .trip-card-status.done {
   background: #e0f2fe;
   color: #0369a1;
+}
+
+.trip-card-status.cancelled {
+  background: #fee2e2;
+  color: #b91c1c;
 }
 
 .trip-title {

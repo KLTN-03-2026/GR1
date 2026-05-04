@@ -164,6 +164,12 @@
                 <span>Mức độ hài lòng</span>
               </router-link>
             </li>
+            <li>
+              <router-link to="/admin/ai-reports" class="submenu-link" :class="{ 'router-link-active': $route.path === '/admin/ai-reports' }">
+                <i class="bi bi-robot"></i>
+                <span>Thống kê AI</span>
+              </router-link>
+            </li>
           </ul>
         </li>
       </ul>
@@ -240,7 +246,7 @@ export default {
       return this.$route.path === '/admin/reports' && this.$route.query.type === type;
     },
     isReportMenuActive() {
-      return this.$route.path === '/admin/reports' || this.$route.path === '/admin/danh-gia-hai-long';
+      return this.$route.path === '/admin/reports' || this.$route.path === '/admin/danh-gia-hai-long' || this.$route.path === '/admin/ai-reports';
     },
   },
 };
