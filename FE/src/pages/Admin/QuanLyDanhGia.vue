@@ -70,7 +70,7 @@
               <th>Đánh giá</th>
               <th>Nội dung phản hồi</th>
               <th>Trạng thái</th>
-              <th>Thao tác</th>
+              <th v-if="hasApprovePermission || hasDeletePermission">Thao tác</th>
             </tr>
           </thead>
           <tbody>
@@ -99,15 +99,17 @@
                   {{ review.trang_thai == 1 ? 'Đã duyệt' : 'Chờ duyệt' }}
                 </span>
               </td>
-              <td>
+              <td v-if="hasApprovePermission || hasDeletePermission">
                 <div class="action-buttons">
-                  <button v-if="review.trang_thai == 0" class="btn-action btn-approve" @click="approveReview(review.id)" title="Duyệt">
-                    <i class="bi bi-check-lg"></i>
-                  </button>
-                  <button v-else class="btn-action btn-hide" @click="hideReview(review.id)" title="Ẩn">
-                    <i class="bi bi-eye-slash-fill"></i>
-                  </button>
-                  <button class="btn-action btn-delete" @click="confirmDelete(review.id)" title="Xoá">
+                  <template v-if="hasApprovePermission">
+                    <button v-if="review.trang_thai == 0" class="btn-action btn-approve" @click="approveReview(review.id)" title="Duyệt">
+                      <i class="bi bi-check-lg"></i>
+                    </button>
+                    <button v-else class="btn-action btn-hide" @click="hideReview(review.id)" title="Ẩn">
+                      <i class="bi bi-eye-slash-fill"></i>
+                    </button>
+                  </template>
+                  <button v-if="hasDeletePermission" class="btn-action btn-delete" @click="confirmDelete(review.id)" title="Xoá">
                     <i class="bi bi-trash3-fill"></i>
                   </button>
                 </div>
@@ -128,11 +130,35 @@
         </div>
       </div>
     </div>
+    <!-- Modal Delete Review -->
+    <div id="modalDeleteReview" class="modal fade" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+          <div class="modal-header border-0 pb-0 justify-content-center mt-3">
+            <div class="delete-icon-wrapper">
+              <i class="bi bi-exclamation-triangle text-danger fs-1"></i>
+            </div>
+          </div>
+          <div class="modal-body text-center pt-3 pb-4">
+            <h4 class="fw-bold mb-2">Xóa đánh giá?</h4>
+            <p class="text-muted mb-0">Bạn có chắc chắn muốn xóa vĩnh viễn đánh giá này không?</p>
+            <p class="text-muted small mt-1">Hành động này không thể hoàn tác.</p>
+          </div>
+          <div class="modal-footer border-0 pt-0 justify-content-center gap-2 mb-3">
+            <button type="button" class="btn btn-light px-4 fw-semibold" data-bs-dismiss="modal">Hủy</button>
+            <button type="button" class="btn btn-danger px-4 fw-semibold" :disabled="isDeleting" @click="executeDelete">
+              <span v-if="isDeleting" class="spinner-border spinner-border-sm me-2"></span>Xóa đánh giá
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script>
 import api from '../../services/api';
+import { Modal } from 'bootstrap';
 
 export default {
   name: 'QuanLyDanhGia',
@@ -142,7 +168,10 @@ export default {
       filterStatus: 'all',
       allReviews: [],
       currentPage: 1,
-      itemsPerPage: 10
+      itemsPerPage: 10,
+      adminData: {},
+      itemToDelete: null,
+      isDeleting: false
     }
   },
   watch: {
@@ -167,12 +196,33 @@ export default {
     },
     approvedCount() {
       return this.allReviews.filter(r => r.trang_thai == 1).length;
+    },
+    hasApprovePermission() {
+      if (Number(this.adminData?.id_chuc_vu || this.adminData?.chuc_vu) === 1) return true;
+      const chucNangs = this.adminData?.chuc_vu?.chuc_nangs || this.adminData?.chucVu?.chucNangs || [];
+      return chucNangs.some(p => p.ma_chuc_nang === 'review_approve');
+    },
+    hasDeletePermission() {
+      if (Number(this.adminData?.id_chuc_vu || this.adminData?.chuc_vu) === 1) return true;
+      const chucNangs = this.adminData?.chuc_vu?.chuc_nangs || this.adminData?.chucVu?.chucNangs || [];
+      return chucNangs.some(p => p.ma_chuc_nang === 'review_delete');
     }
   },
   mounted() {
+    this.loadAdminData();
     this.fetchReviews();
   },
   methods: {
+    loadAdminData() {
+      try {
+        const raw = localStorage.getItem('admin_data');
+        if (raw) this.adminData = JSON.parse(raw) || {};
+      } catch (e) { }
+    },
+    authHeader() {
+      const token = localStorage.getItem('key_admin');
+      return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+    },
     goPage(page) {
       if (page >= 1 && page <= this.totalPages) {
         this.currentPage = page;
@@ -193,8 +243,9 @@ export default {
       }
     },
     async approveReview(id) {
+      if (!this.hasApprovePermission) return;
       try {
-        const { data: json } = await api.put(`/danh-gias/${id}`, { trang_thai: 1 });
+        const { data: json } = await api.put(`/danh-gias/${id}`, { trang_thai: 1 }, this.authHeader());
         if (json.status === 'success') {
           const idx = this.allReviews.findIndex(r => r.id === id);
           if (idx !== -1) {
@@ -210,8 +261,9 @@ export default {
       }
     },
     async hideReview(id) {
+      if (!this.hasApprovePermission) return;
       try {
-        const { data: json } = await api.put(`/danh-gias/${id}`, { trang_thai: 0 });
+        const { data: json } = await api.put(`/danh-gias/${id}`, { trang_thai: 0 }, this.authHeader());
         if (json.status === 'success') {
           const idx = this.allReviews.findIndex(r => r.id === id);
           if (idx !== -1) {
@@ -226,21 +278,30 @@ export default {
         if (this.$toast) this.$toast.error('Lỗi khi ẩn đánh giá.');
       }
     },
-    async confirmDelete(id) {
-      if (!confirm("Xác nhận xoá vĩnh viễn đánh giá này?")) {
-        return;
-      }
+    confirmDelete(id) {
+      if (!this.hasDeletePermission) return;
+      this.itemToDelete = id;
+      const m = Modal.getOrCreateInstance(document.getElementById('modalDeleteReview'));
+      m.show();
+    },
+    async executeDelete() {
+      if (!this.itemToDelete || !this.hasDeletePermission) return;
+      this.isDeleting = true;
       try {
-        const { data: json } = await api.delete(`/danh-gias/${id}`);
+        const { data: json } = await api.delete(`/danh-gias/${this.itemToDelete}`, this.authHeader());
         if (json.status === 'success') {
-          this.allReviews = this.allReviews.filter(r => r.id !== id);
+          this.allReviews = this.allReviews.filter(r => r.id !== this.itemToDelete);
           if (this.$toast) this.$toast.success('Đã xoá đánh giá thành công.');
+          Modal.getInstance(document.getElementById('modalDeleteReview'))?.hide();
         } else {
           throw new Error('Xóa thất bại');
         }
       } catch (e) {
         console.error(e);
         if (this.$toast) this.$toast.error('Lỗi khi xoá đánh giá.');
+      } finally {
+        this.isDeleting = false;
+        this.itemToDelete = null;
       }
     }
   }
@@ -536,4 +597,16 @@ export default {
 .dg-pagination button:hover:not(:disabled) { border-color: #10b981; color: #10b981; }
 .dg-pagination button:disabled { opacity: .4; cursor: not-allowed; }
 .dg-pagination span { font-size: .88rem; font-weight: 600; color: #627289; }
+
+/* Modal Icon */
+.delete-icon-wrapper {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: #fef2f2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto;
+}
 </style>

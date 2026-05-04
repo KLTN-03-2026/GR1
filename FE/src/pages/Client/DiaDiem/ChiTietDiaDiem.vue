@@ -190,13 +190,6 @@
             </ul>
 
             <button
-              class="btn btn-primary w-100 py-3 rounded-pill fw-bold shadow-sm d-flex justify-content-center align-items-center mt-4"
-              style="background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%); border: none;"
-              @click="addToItinerary">
-              <i class="bi bi-calendar-plus me-2 fs-5"></i> Thêm vào lịch trình
-            </button>
-            
-            <button
               class="btn w-100 py-3 rounded-pill fw-bold shadow-sm d-flex justify-content-center align-items-center mt-3 text-white"
               style="background: linear-gradient(135deg, #10b981 0%, #0ea5e9 100%); border: none;"
               @click="openShareModal">
@@ -435,9 +428,6 @@ export default {
       setTimeout(() => {
         if (this.modalMapInstance) this.modalMapInstance.invalidateSize();
       }, 800);
-    },
-    addToItinerary() {
-        this.$toast.info('Vui lòng sử dụng trang Tạo lịch trình để thêm địa điểm này!'); 
     },
     openShareModal() {
       if (!this.isLoggedIn) {

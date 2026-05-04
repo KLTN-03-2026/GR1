@@ -115,6 +115,11 @@ const routes = [
   },
 
   {
+    path: "/admin/ai-reports",
+    component: () => import("../pages/Admin/AiReports.vue"),
+    meta: { layout: "default" },
+  },
+  {
     path: "/admin/dashboard",
     component: () => import("../pages/Admin/Dashboard.vue"),
     meta: { layout: "default" },
