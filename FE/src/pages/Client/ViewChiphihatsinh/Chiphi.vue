@@ -359,4 +359,3 @@ tr:hover td {
 	}
 }
 </style>
-</style>
