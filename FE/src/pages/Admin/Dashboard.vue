@@ -1,15 +1,6 @@
 <template>
   <div class="dashboard">
-    <div class="hero-card mb-4">
-      <div class="hero-copy">
-        <p class="hero-eyebrow">Da Nang Travel Planner</p>
-        <h1 class="page-title">Dashboard quản trị hệ thống đề xuất lịch trình và tối ưu ngân sách</h1>
-        <p class="page-subtitle">
-          Trang này tập trung vào dữ liệu phục vụ đề tài: người dùng, nhân sự vận hành và các hạng mục phân tích
-          cần bổ sung sau. Không sử dụng mô hình đơn đặt hàng hay doanh thu.
-        </p>
-      </div>
-
+    <div class="dashboard-actions mb-4">
       <button class="btn btn-refresh" :disabled="isLoading" @click="fetchDashboardData">
         <span v-if="isLoading" class="spinner-border spinner-border-sm me-2" role="status"></span>
         <i v-else class="bi bi-arrow-clockwise me-2"></i>Làm mới
@@ -796,60 +787,26 @@ export default {
   }
 }
 
-.hero-card {
+.dashboard-actions {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 24px;
-  padding: 28px;
-  border-radius: 24px;
-  background:
-    radial-gradient(circle at top right, rgba(14, 165, 233, 0.22), transparent 30%),
-    linear-gradient(135deg, #0f172a 0%, #102a43 55%, #164e63 100%);
-  color: #fff;
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.14);
-}
-
-.hero-copy {
-  max-width: 840px;
-}
-
-.hero-eyebrow {
-  margin-bottom: 10px;
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-}
-
-.page-title {
-  font-size: 2rem;
-  font-weight: 800;
-  line-height: 1.25;
-  margin-bottom: 12px;
-}
-
-.page-subtitle {
-  max-width: 760px;
-  margin: 0;
-  color: rgba(255, 255, 255, 0.82);
-  line-height: 1.7;
+  justify-content: flex-end;
 }
 
 .btn-refresh {
   white-space: nowrap;
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: #fff;
+  color: #0f766e;
+  border: 1px solid #cbd5e1;
   border-radius: 12px;
   padding: 10px 18px;
   font-weight: 600;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
 }
 
 .btn-refresh:hover {
-  background: rgba(255, 255, 255, 0.18);
-  color: #fff;
+  background: #f0fdfa;
+  border-color: #14b8a6;
+  color: #0f766e;
 }
 
 .dashboard-alert {
@@ -1171,16 +1128,8 @@ export default {
 }
 
 @media (max-width: 767.98px) {
-  .hero-card {
-    flex-direction: column;
-  }
-
   .btn-refresh {
     width: 100%;
-  }
-
-  .page-title {
-    font-size: 1.6rem;
   }
 }
 
