@@ -10,7 +10,7 @@
           <h1 class="hero-title">Báo cáo trải nghiệm du lịch Đà Nẵng</h1>
           <p class="hero-description mx-auto">
             Tổng hợp đánh giá từ cộng đồng du khách về các địa điểm, lịch trình và trải nghiệm
-            tại Đà Nẵng. Giúp bạn chọn được điểm đến phù hợp nhất cho chuyến đi.
+            tại Đà Nẵng.
           </p>
 
           <!-- Search Bar -->
