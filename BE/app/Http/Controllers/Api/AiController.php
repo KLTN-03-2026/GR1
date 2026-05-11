@@ -109,6 +109,72 @@ class AiController extends Controller
         return $res;
     }
 
+    public function generatePlaceTips(Request $request)
+    {
+        $request->validate([
+            'ten_dia_diem'  => 'required|string',
+            'loai_dia_diem' => 'nullable|string',
+            'dia_chi'       => 'nullable|string',
+            'gio_bat_dau'   => 'nullable|string',
+            'thoi_tiet'     => 'nullable|string'
+        ]);
+
+        $apiKey = config('services.gemini.key');
+        if (!$apiKey) {
+            return response()->json([
+                'ghi_chu' => "Địa điểm: {$request->ten_dia_diem} — {$request->dia_chi}",
+                'travel_tips' => "Loại hình: {$request->loai_dia_diem}. Vui lòng tham khảo thêm thông tin tại địa điểm."
+            ]);
+        }
+
+        $prompt = <<<PROMPT
+Bạn là chuyên gia du lịch Đà Nẵng. Khách hàng vừa đổi sang một địa điểm mới trong lịch trình.
+Hãy tạo Ghi chú và Gợi ý cho địa điểm này.
+
+Thông tin địa điểm:
+- Tên: {$request->ten_dia_diem}
+- Phân loại: {$request->loai_dia_diem}
+- Địa chỉ: {$request->dia_chi}
+- Giờ dự kiến đến: {$request->gio_bat_dau}
+- Thời tiết dự kiến: {$request->thoi_tiet}
+
+Format JSON bắt buộc trả về (chỉ trả JSON, không bọc markdown):
+{
+    "ghi_chu": "Lý do ngắn gọn 1 câu vì sao nên đi điểm này vào giờ/thời tiết này",
+    "travel_tips": "Mẹo thực tế cụ thể 1-2 câu (gọi món gì, góc chụp nào, lưu ý gì)"
+}
+PROMPT;
+
+        $apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={$apiKey}";
+        try {
+            $response = Http::timeout(15)->post($apiUrl, [
+                'contents'         => [['parts' => [['text' => $prompt]]]],
+                'generationConfig' => [
+                    'temperature'    => 0.2,
+                    'maxOutputTokens'=> 300,
+                    'responseMimeType' => 'application/json',
+                    'thinkingConfig' => ['thinkingBudget' => 0],
+                ],
+            ]);
+
+            if ($response->successful()) {
+                $text = $response->json('candidates.0.content.parts.0.text');
+                $data = $this->extractJsonObject($text);
+                if ($data && isset($data['ghi_chu']) && isset($data['travel_tips'])) {
+                    return response()->json($data);
+                }
+            }
+        } catch (\Exception $e) {
+            Log::error('[generatePlaceTips] Lỗi: ' . $e->getMessage());
+        }
+
+        // Fallback
+        return response()->json([
+            'ghi_chu' => "Địa điểm: {$request->ten_dia_diem} — {$request->dia_chi}",
+            'travel_tips' => "Loại hình: {$request->loai_dia_diem}. Vui lòng tham khảo thêm thông tin tại địa điểm."
+        ]);
+    }
+
     public function generateItinerary(Request $request)
     {
         set_time_limit(180); // Tăng thời gian tối đa để tránh lỗi Timeout khi gọi AI
@@ -123,11 +189,24 @@ class AiController extends Controller
         $days = (strtotime($ngayKetThuc) - strtotime($ngayBatDau)) / 86400 + 1;
         $days = max(1, round($days));
 
-        // Trích xuất từ khóa sở thích từ ghi chú
-        $preferences = $this->extractPreferences($notes);
+        $people      = $request->so_luong_thanh_vien ?? 1;
+        $weatherData = $request->input('weather_data', []);
+        $apiKey      = config('services.gemini.key');
 
-        $people = $request->so_luong_thanh_vien ?? 1;
-        $weatherData = $request->input('weather_data', []); // Dữ liệu thời tiết từ frontend
+        // ── [PLAN D] Phân tích ghi chú bằng AI NLP ─────────────────────────
+        $enrichedContext = [];
+        if ($apiKey && !empty(trim($notes))) {
+            $enrichedContext = $this->extractPreferencesWithAi($notes, $apiKey);
+            $preferences     = $enrichedContext['preferences'] ?? [];
+        } else {
+            $preferences = $this->extractPreferences($notes);
+        }
+
+        Log::info('[Plan D] Preferences extracted', [
+            'method'      => !empty($enrichedContext) ? 'AI-NLP' : 'keyword-match',
+            'preferences' => $preferences,
+            'group_type'  => $enrichedContext['group_type'] ?? 'N/A',
+        ]);
 
         try {
             // --- BƯỚC 1: Thuật toán Content-based & Rule-based ---
@@ -136,9 +215,8 @@ class AiController extends Controller
             );
 
             // --- BƯỚC 2: Tinh chỉnh bằng AI (Nếu có API Key) ---
-            $apiKey = config('services.gemini.key');
             if ($apiKey) {
-                return $this->refineWithAi($technicalItinerary, $notes, $apiKey);
+                return $this->refineWithAi($technicalItinerary, $notes, $apiKey, $enrichedContext);
             }
 
             // Nếu không có AI, trả về kết quả thuật toán thẳng (Technical Only)
@@ -164,41 +242,88 @@ class AiController extends Controller
     /**
      * Sử dụng AI để tinh chỉnh mô tả và thêm lời khuyên du lịch chuyên nghiệp.
      */
-    private function refineWithAi($itinerary, $userNotes, $apiKey)
+    private function refineWithAi($itinerary, $userNotes, $apiKey, array $enrichedContext = [])
     {
-        // 1. TỐI ƯU TOKENS: Lọc dữ liệu mỏng nhất để gửi cho AI
+        // [Plan B] Compact data - chỉ gửi fields cần thiết, bỏ null để tiết kiệm tokens
         $simplified = [];
-        foreach ($itinerary as $day) {
+        foreach ($itinerary as $dayIdx => $day) {
             foreach ($day as $place) {
-                $simplified[(string)$place['id_dia_diem']] = [
-                    'id_dia_diem'   => $place['id_dia_diem'],
-                    'ten_dia_diem'  => $place['ten_dia_diem'],
-                    'gio'           => $place['gio'],
-                    'loai_dia_diem' => $place['loai_dia_diem'] ?? '',
+                $item = [
+                    'id'   => $place['id_dia_diem'],
+                    'ten'  => $place['ten_dia_diem'],
+                    'loai' => $place['loai_dia_diem'] ?? '',
+                    'gio'  => $place['gio_bat_dau']   ?? $place['gio'],
+                    'ngay' => $place['ngay_index']     ?? $dayIdx,
+                    'wkey' => $place['window_key']     ?? null,
+                    'tt'   => $place['thoi_tiet']      ?? null,
                 ];
+                // Chỉ thêm tọa độ nếu có (tiết kiệm tokens)
+                if (!empty($place['vi_do']) && !empty($place['kinh_do'])) {
+                    $item['lat'] = round((float)$place['vi_do'], 4);
+                    $item['lng'] = round((float)$place['kinh_do'], 4);
+                }
+                // Chỉ thêm giờ mở cửa nếu có
+                if (!empty($place['gio_mo_cua'])) {
+                    $item['mo']   = $place['gio_mo_cua'];
+                    $item['dong'] = $place['gio_dong_cua'] ?? null;
+                }
+                $simplified[(string)$place['id_dia_diem']] = $item;
             }
         }
 
-        $prompt = $this->buildRefinementPrompt(array_values($simplified), $userNotes);
-        // gemini-1.5-pro không khả dụng với key này; dùng gemini-2.5-flash (confirmed 200 OK)
+        $prompt = $this->buildRefinementPrompt(array_values($simplified), $userNotes, $enrichedContext);
+        // gemini-2.5-flash
         $apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={$apiKey}";
 
         $startTime = microtime(true);
 
         try {
-            $response = Http::timeout(45)->post($apiUrl, [
-                'contents' => [
-                    ['parts' => [['text' => $prompt]]]
-                ],
-                'generationConfig' => [
-                    'temperature'     => 0.2,
-                    'maxOutputTokens' => 4000,
-                    'responseMimeType' => 'application/json'
-                ]
-            ]);
+            // Retry tối đa 3 lần với exponential backoff (503/429 là lỗi tạm thời)
+            $response    = null;
+            $maxAttempts = 3;
+            for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+                $response = Http::timeout(60)->post($apiUrl, [
+                    'contents' => [
+                        ['parts' => [['text' => $prompt]]]
+                    ],
+                    'generationConfig' => [
+                        'temperature'      => 0.2,
+                        'maxOutputTokens'  => 8192,
+                        'responseMimeType' => 'application/json',
+                        'thinkingConfig'   => ['thinkingBudget' => 0],
+                    ]
+                ]);
+
+                $statusCode = $response->status();
+                if ($response->successful()) break; // Thành công → thoát vòng lặp
+
+                // Chỉ retry với lỗi tạm thời
+                if (!in_array($statusCode, [429, 503]) || $attempt === $maxAttempts) break;
+
+                $delay = pow(2, $attempt); // 2s, 4s, 8s
+                Log::warning("[Plan B] Gemini lỗi {$statusCode}, retry {$attempt}/{$maxAttempts} sau {$delay}s...");
+                sleep($delay);
+            }
 
             if ($response->successful()) {
                 $text = $response->json('candidates.0.content.parts.0.text');
+
+                // Kiểm tra bị cắt giữa chừng
+                $finishReason = $response->json('candidates.0.finishReason');
+                if ($finishReason === 'MAX_TOKENS') {
+                    Log::warning('[Plan B] Gemini response bị cắt (MAX_TOKENS). Prompt tokens: '
+                        . $response->json('usageMetadata.promptTokenCount')
+                        . ', thoughtsTokens: '
+                        . $response->json('usageMetadata.thoughtsTokenCount'));
+                    // Vẫn thử parse phần đã có
+                }
+
+                Log::info('[Plan B] Gemini OK — thoughtsTokens: '
+                    . $response->json('usageMetadata.thoughtsTokenCount')
+                    . ', outputTokens: '
+                    . $response->json('usageMetadata.candidatesTokenCount')
+                    . ', finishReason: ' . $finishReason);
+
                 $refinedData = $this->extractJsonObject($text);
 
                 if ($refinedData && is_array($refinedData)) {
@@ -243,136 +368,215 @@ class AiController extends Controller
         ]);
     }
 
-    private function buildRefinementPrompt($simplifiedItinerary, $userNotes)
+    private function buildRefinementPrompt(array $simplifiedItinerary, string $userNotes, array $enrichedContext = []): string
     {
         $itineraryJson = json_encode($simplifiedItinerary, JSON_UNESCAPED_UNICODE);
 
-        return "
-Bạn là AI Travel Optimizer cho lịch trình Đà Nẵng.
+        // ── [Plan B] Xây dựng section hồ sơ người dùng từ Plan D ──────────
+        $profileSection = '';
+        if (!empty($enrichedContext)) {
+            $groupType    = $enrichedContext['group_type']          ?? 'general';
+            $mood         = $enrichedContext['mood']                ?? '';
+            $prefs        = implode(', ', $enrichedContext['preferences']       ?? []);
+            $restrictions = implode(', ', $enrichedContext['food_restrictions'] ?? []);
+            $specials     = implode(', ', $enrichedContext['special_requests']  ?? []);
 
-=========================
-VAI TRÒ
+            $profileSection = "=== HỒ SƠ NGƯỜI DÙNG (AI đã phân tích) ===\n"
+                . "Loại nhóm    : {$groupType}\n"
+                . "Phong cách   : {$mood}\n"
+                . "Sở thích     : {$prefs}\n"
+                . (!empty($restrictions) ? "Kiêng cữ ăn : {$restrictions}\n" : '')
+                . (!empty($specials)     ? "Yêu cầu đặc biệt: {$specials}\n" : '');
+        }
 
-- Không tạo địa điểm mới
-- Không xóa địa điểm
+        $cleanNotes = !empty(trim($userNotes))
+            ? "Ghi chú gốc của khách: \"{$userNotes}\""
+            : '';
+
+        return <<<PROMPT
+Bạn là AI Travel Optimizer chuyên nghiệp cho lịch trình du lịch Đà Nẵng.
+
+=== VAI TRÒ ===
+- KHÔNG tạo địa điểm mới, KHÔNG xóa địa điểm
 - Giữ nguyên id_dia_diem
-- Có thể đổi thứ tự trong cùng ngày để hợp lý hơn
+- Có thể đổi thứ tự địa điểm trong cùng một ngày (cùng ngay_index)
 - Không chuyển địa điểm sang ngày khác
 
-=========================
-ƯU TIÊN TỐI ƯU
+{$profileSection}
+=== GHI CHÚ NGƯỜI DÙNG ===
+{$cleanNotes}
+Nếu ghi chú vô nghĩa/rác/không liên quan du lịch → BỎ QUA, lên lịch chuẩn bình thường.
 
-1. TUYẾN ĐƯỜNG HỢP LÝ
-   - Gom cụm địa điểm gần nhau trong cùng buổi
-   - Tránh di chuyển zigzag qua nhiều quận
-   - Sáng → trung tâm / gần khách sạn
-   - Chiều → dần ra ngoại ô hoặc bãi biển
-   - Tối → khu vui chơi / cầu / chợ đêm
+=== TỐI ƯU TUYẾN ĐƯỜNG (dùng lat, lng) ===
+- Gom cụm địa điểm gần nhau trong cùng buổi (wkey giống nhau, ngay giống nhau)
+- Tránh zigzag giữa các quận — ưu tiên di chuyển liền mạch
+- Sáng: trung tâm / gần khách sạn → Chiều: ra ngoại ô / biển → Tối: khu vui chơi / cầu
+- Ước lượng 10-15 phút di chuyển giữa 2 điểm nếu tọa độ xa nhau
 
-2. ĐA DẠNG TRẢI NGHIỆM
-   - Không xếp 2 địa điểm cùng loại liên tiếp (ví dụ: không 2 quán ăn liền nhau)
-   - Xen kẽ: Ăn → Tham quan → Cafe → Tham quan → Ăn tối → Giải trí
-   - Mỗi ngày có ít nhất 1 trải nghiệm đặc trưng Đà Nẵng
+=== TỐI ƯU THỜI TIẾT (dùng tt) ===
+- "rain" hoặc "cloudy" → ưu tiên địa điểm trong nhà (cafe, bảo tàng, nhà hàng)
+  Tránh bãi biển, công viên ngoài trời trong khung giờ đó
+- "sunny" → khuyến khích outdoor, biển, check-in ngoài trời
 
-3. BAN ĐÊM PHONG PHÚ (sau 19:00)
-   - Ưu tiên: Cầu Rồng / cầu Tình Yêu / cầu Trần Thị Lý
-   - Xen kẽ: cafe acoustic / quán nhậu hải sản / bar / chợ đêm
-   - Không để tối chỉ toàn ăn uống đơn điệu
+=== KIỂM TRA GIỜ MỞ CỬA (dùng mo, dong) ===
+- Nếu gio_bat_dau nằm ngoài [mo, dong] → điều chỉnh hoặc ghi chú cảnh báo
+- Nếu mo=null → bỏ qua ràng buộc này
 
-=========================
-QUY TẮC THỜI GIAN THỰC TẾ
+=== GIẢI THÍCH FIELD DỮ LIỆU ===
+- id: id địa điểm (dùng làm key trong output)
+- ten: tên địa điểm | loai: loại hình
+- gio: giờ bắt đầu | ngay: chỉ số ngày (0=ngày 1, 1=ngày 2...)
+- wkey: khung giờ (breakfast/morning/lunch/rest/afternoon/dinner/night)
+- tt: thời tiết (sunny/rain/cloudy/partly_cloudy)
+- lat/lng: tọa độ GPS | mo/dong: giờ mở/đóng cửa
 
-ĂN UỐNG:
-- Ăn sáng: 30-45 phút
-- Ăn trưa: 45-60 phút
-- Ăn tối: 60-90 phút
-- Ăn vặt / chè / kem: 20-30 phút
+=== NGÀY ĐẶC BIỆT ===
+- "Cầu Rồng – Phun lửa" chỉ xếp 21:00, chỉ Thứ 6 và Thứ 7
+- Mỗi ngày cần ít nhất 1 trải nghiệm đặc trưng Đà Nẵng
 
-CAFE / CHECK-IN:
-- Cafe thông thường: 30-60 phút
-- Cafe view đẹp / sống ảo: 45-75 phút
+=== ĐA DẠNG TRẢI NGHIỆM ===
+- Không xếp 2 địa điểm cùng loai_dia_diem liên tiếp
+- Xen kẽ: Ăn → Tham quan → Cafe → Tham quan → Ăn tối → Giải trí
+- Tối (window_key=night): Cầu / Chợ đêm / Cafe acoustic / Bar nhẹ
 
-THAM QUAN:
-- Biển: 60-90 phút
-- Cầu / điểm nhỏ: 30-45 phút
-- Chùa / tâm linh: 45-75 phút
-- Bảo tàng: 60-90 phút
-- Chợ đêm / phố đi bộ: 60-90 phút
-- Khu lớn (Bà Nà / Sơn Trà / Ngũ Hành Sơn): 180-240 phút
+=== THỜI LƯỢNG CHUẨN ===
+Ăn sáng: 30-45p | Ăn trưa: 45-60p | Ăn tối: 60-90p | Ăn vặt/Cafe: 20-40p
+Biển: 60-90p | Chùa/Tâm linh: 45-75p | Bảo tàng: 60-90p
+Chợ đêm/Phố đi bộ: 60-90p | Khu lớn (Bà Nà, NGS): 180-240p | Cầu/Điểm nhỏ: 30-45p
+Bar/Acoustic/Pub: 60-90p
 
-BAR / ACOUSTIC / PUB:
-- 60-90 phút
-
-=========================
-QUY TẮC TÍNH GIỜ
-
+=== QUY TẮC TÍNH GIỜ ===
 - gio_ket_thuc = gio_bat_dau + thoi_luong_phut
-- Không để slot chồng lên nhau
-- Nếu đổi thứ tự → tính lại giờ cho toàn ngày bắt đầu từ slot đầu tiên
-- Slot đầu tiên mỗi ngày giữ giờ ban đầu backend cung cấp
+- Không để các slot trong cùng ngày chồng giờ
+- Slot đầu tiên mỗi ngày giữ gio_bat_dau gốc
+- Nếu đổi thứ tự → tính lại toàn bộ giờ trong ngày đó
 
-=========================
-ƯU TIÊN NGƯỜI DÙNG VÀ XỬ LÝ NGOẠI LỆ
+=== DỮ LIỆU LỊCH TRÌNH ===
+{$itineraryJson}
 
-$userNotes
-
-CHÚ Ý QUAN TRỌNG VỀ GHI CHÚ:
-Nếu nội dung ƯU TIÊN NGƯỜI DÙNG phía trên là các từ khóa vô nghĩa, ký tự rác, hoặc không liên quan tới du lịch (ví dụ: chửi thề, test, asdasd, alo alo, đánh nhau), hãy BỎ QUA hoàn toàn phần ghi chú đó và tiếp tục lên lịch trình tiêu chuẩn bình thường. KHÔNG ĐƯỢC từ chối phục vụ hoặc trả lời lạc đề.
-
-=========================
-DỮ LIỆU LỊCH TRÌNH
-
-$itineraryJson
-
-=========================
-FORMAT JSON BẮT BUỘC
-
+=== FORMAT JSON OUTPUT BẮT BUỘC ===
 {
-  \"1\": {
-    \"gio_bat_dau\": \"06:30\",
-    \"gio_ket_thuc\": \"07:10\",
-    \"thoi_luong_phut\": 40,
-    \"ghi_chu\": \"Ăn sáng đặc sản địa phương, nên đi sớm\",
-    \"travel_tips\": \"Gọi thêm chả cá chiên, đừng quên nước mắm ớt\"
+  "<id_dia_diem>": {
+    "gio_bat_dau": "HH:MM",
+    "gio_ket_thuc": "HH:MM",
+    "thoi_luong_phut": <số nguyên>,
+    "ghi_chu": "...",
+    "travel_tips": "..."
   }
 }
 
-QUY TẮC OUTPUT:
-- Trả đầy đủ TẤT CẢ id_dia_diem có trong input.
-- Chỉ trả JSON object thuần túy.
-- Không markdown, không giải thích, không comment.
-- ghi_chu: mô tả ngắn gọn lý do / đặc điểm địa điểm này trong ngày.
-- travel_tips: lời khuyên thực tế như local expert (ví dụ: đặt bàn trước, tránh giờ cao điểm, mang gì theo).
-";
+Quy tắc output:
+- Trả ĐỦ TẤT CẢ id_dia_diem trong input
+- Chỉ JSON object thuần túy — KHÔNG markdown, KHÔNG comment
+
+PHÂN BIỆT ghi_chu và travel_tips (QUAN TRỌNG — không được viết trùng nội dung):
+
+ghi_chu = Lý do địa điểm này PHÙ HỢP với khung giờ này (ngắn, 1 câu):
+  Ví dụ ĐÚNG: "Ăn sáng lý tưởng trước khi tham quan khu trung tâm"
+  Ví dụ ĐÚNG: "Nghỉ ngơi bên bờ biển sau buổi sáng dày đặc hoạt động"
+  Ví dụ SAI: "Quán Mì Quảng nổi tiếng, nên đến sớm tránh đông" ← đây là tips, không phải ghi chú
+
+travel_tips = Mẹo THỰC TẾ cụ thể về địa điểm đó mà local mới biết (1-2 câu):
+  Ví dụ ĐÚNG: "Gọi mì gà trộn đặc biệt — không có trên menu. Đến trước 7h để có bàn ngồi ngoài trời."
+  Ví dụ ĐÚNG: "Thuê xe máy 80k/ngày ngay cổng vào để tự khám phá. Tránh khu lưu niệm gần lối ra."
+  Ví dụ SAI: "Đây là điểm tham quan tâm linh nổi tiếng của Đà Nẵng" ← quá chung chung
+
+- Nếu có kiêng cữ ăn từ hồ sơ người dùng → travel_tips PHẢI cảnh báo nếu địa điểm đó liên quan
+PROMPT;
     }
 
-    private function extractPreferences($notes)
+    /**
+     * Fallback keyword match (dùng khi không có API key hoặc Plan D thất bại)
+     */
+    private function extractPreferences($notes): array
     {
-        $keywords = ['biển', 'ẩm thực', 'ăn uống', 'check-in', 'chụp ảnh', 'văn hóa', 'tâm linh', 'giải trí', 'trẻ em', 'gia đình', 'lãng mạn'];
-        $found = [];
+        $keywords = ['biển', 'ẩm thực', 'ăn uống', 'check-in', 'chụp ảnh', 'văn hóa',
+                     'tâm linh', 'giải trí', 'trẻ em', 'gia đình', 'lãng mạn', 'nhậu',
+                     'acoustic', 'hải sản', 'cà phê', 'cafe', 'chùa', 'bảo tàng'];
+        $found    = [];
         $notesLow = mb_strtolower($notes);
-
         foreach ($keywords as $kw) {
             if (mb_strpos($notesLow, $kw) !== false) {
                 $found[] = $kw;
             }
         }
-
         return $found;
+    }
+
+    /**
+     * [Plan D] Dùng Gemini Flash để phân tích free-text ghi chú của người dùng.
+     * Chi phí: ~$0.00003/lần — cực rẻ, timeout ngắn (12s).
+     * Fallback về extractPreferences() nếu AI không phản hồi.
+     */
+    private function extractPreferencesWithAi(string $notes, string $apiKey): array
+    {
+        $default = [
+            'preferences'       => $this->extractPreferences($notes),
+            'food_restrictions' => [],
+            'special_requests'  => [],
+            'group_type'        => 'general',
+            'mood'              => '',
+        ];
+
+        $prompt = <<<PROMPT
+Phân tích ghi chú du lịch Đà Nẵng sau và trả về JSON thuần túy (không markdown):
+Ghi chú: "{$notes}"
+
+Format bắt buộc:
+{
+  "preferences": ["ẩm thực đường phố", "biển"],
+  "food_restrictions": ["không hải sản"],
+  "special_requests": ["cần nghỉ trưa"],
+  "group_type": "bạn bè",
+  "mood": "vui vẻ, náo nhiệt"
+}
+- preferences: tối đa 8 sở thích du lịch cụ thể
+- food_restrictions: dị ứng, kiêng ăn (mảng rỗng nếu không có)
+- special_requests: yêu cầu về lịch trình (mảng rỗng nếu không có)
+- group_type: solo / cặp đôi / gia đình / bạn bè / công ty / general
+- mood: phong cách chuyến đi (1 câu ngắn)
+Nếu ghi chú vô nghĩa → trả tất cả rỗng.
+PROMPT;
+
+        $apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={$apiKey}";
+
+        try {
+            $response = Http::timeout(12)->post($apiUrl, [
+                'contents' => [
+                    ['parts' => [['text' => $prompt]]]
+                ],
+                'generationConfig' => [
+                    'temperature'      => 0.1,
+                    'responseMimeType' => 'application/json',
+                    'thinkingConfig'   => ['thinkingBudget' => 0],
+                ]
+            ]);
+
+            if ($response->successful()) {
+                $text = $response->json('candidates.0.content.parts.0.text');
+                // Dùng extractJsonObject để linh hoạt hơn
+                $data = $this->extractJsonObject($text);
+                if ($data && is_array($data)) {
+                    Log::info('[Plan D] extractPreferencesWithAi OK', $data);
+                    return array_merge($default, $data);
+                }
+            }
+            Log::warning('[Plan D] extractPreferencesWithAi failed, status=' . $response->status());
+        } catch (\Exception $e) {
+            Log::error('[Plan D] extractPreferencesWithAi exception: ' . $e->getMessage());
+        }
+
+        return $default;
     }
 
     private function extractJsonObject($text)
     {
-        // Loại bỏ markdown code block nếu có
         $text = preg_replace('/```(?:json)?|```/', '', $text);
         $text = trim($text);
-
         $startPos = strpos($text, '{');
-        $endPos = strrpos($text, '}');
-
+        $endPos   = strrpos($text, '}');
         if ($startPos !== false && $endPos !== false) {
-            $jsonText = substr($text, $startPos, $endPos - $startPos + 1);
-            return json_decode($jsonText, true);
+            return json_decode(substr($text, $startPos, $endPos - $startPos + 1), true);
         }
         return null;
     }

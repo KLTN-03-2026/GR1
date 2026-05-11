@@ -263,6 +263,11 @@ class RecommendationService
                         'window_key'      => $slot['window_key'],
                         'window_start'    => $slot['min_time'],
                         'window_end'      => $slot['max_time'],
+                        // [Plan B] Context bổ sung cho AI prompt
+                        'gio_mo_cua'      => $bestPlace->gio_mo_cua   ?? null,
+                        'gio_dong_cua'    => $bestPlace->gio_dong_cua ?? null,
+                        'thoi_tiet'       => $todayWeather,
+                        'ngay_index'      => $d,
                     ];
 
                     if ($bestPlace->vi_do && $bestPlace->kinh_do) {

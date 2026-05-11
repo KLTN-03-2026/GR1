@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AdminController;
 use App\Http\Controllers\Api\ChucVuController;
@@ -93,6 +94,7 @@ Route::prefix('client')->group(function () {
     Route::prefix('ai')->middleware('auth:sanctum')->group(function () {
         Route::post('/generate-itinerary', [\App\Http\Controllers\Api\AiController::class, 'generateItinerary']);
         Route::post('/reorder-itinerary/{id}', [\App\Http\Controllers\Api\AiController::class, 'reorderWithAi']);
+        Route::post('/generate-place-tips', [\App\Http\Controllers\Api\AiController::class, 'generatePlaceTips']);
     });
 
     // Đánh giá hệ thống (Client gửi sau khi lưu lịch trình – không bắt buộc đăng nhập)
