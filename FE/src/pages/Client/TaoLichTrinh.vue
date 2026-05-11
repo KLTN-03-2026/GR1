@@ -292,15 +292,15 @@
                   </div>
                   <div class="tc-note">
                     <i class="bi bi-pencil-square me-1"></i>
-                    <input v-model="item.ghi_chu" type="text" placeholder="Thêm ghi chú cho địa điểm này..."
-                      class="note-input" />
+                    <textarea v-model="item.ghi_chu" rows="2" placeholder="Thêm ghi chú cho địa điểm này..."
+                      class="note-input" style="resize: none; min-height: 2.4rem;"></textarea>
                   </div>
                   <div v-if="item.travel_tips" class="tc-tips mt-2 p-2 rounded"
                     style="background: #fff8e1; border-left: 3px solid #ffc107;">
                     <small class="d-block mb-1 font-weight-bold" style="color: #856404;">
                       <i class="bi bi-lightbulb-fill me-1"></i>Mẹo từ chuyên gia AI:
                     </small>
-                    <span style="font-size: 0.85rem; color: #555;">{{ item.travel_tips }}</span>
+                    <span style="font-size: 0.85rem; color: #555; white-space: pre-line; word-break: break-word;">{{ item.travel_tips }}</span>
                   </div>
                 </div>
               </div>
@@ -809,11 +809,20 @@ export default {
 
         const usedIds = this.lichTrinhTheoNgay.flat().map(i => i.id_dia_diem);
 
-        // Lọc ứng viên: cùng danh mục, chưa có trong lịch trình
-        const candidates = this.allDiaDiem.filter(d =>
-          d.id_danh_muc === currentPlace.id_danh_muc &&
+        // Lọc ứng viên: ưu tiên MỨC 1 là cùng `loai_dia_diem` (VD: Bảo tàng -> Bảo tàng)
+        let candidates = this.allDiaDiem.filter(d =>
+          d.loai_dia_diem && currentPlace.loai_dia_diem &&
+          d.loai_dia_diem === currentPlace.loai_dia_diem &&
           !usedIds.includes(d.id)
         );
+
+        // MỨC 2: Nếu không có cùng `loai_dia_diem`, fallback về cùng danh mục `id_danh_muc`
+        if (candidates.length === 0) {
+          candidates = this.allDiaDiem.filter(d =>
+            d.id_danh_muc === currentPlace.id_danh_muc &&
+            !usedIds.includes(d.id)
+          );
+        }
 
         if (candidates.length === 0) {
           this.$toast?.error('Không tìm thấy địa điểm phù hợp để thay thế.');
@@ -859,6 +868,33 @@ export default {
         const gioKetThuc = fmt(toMin(gioBatDau) + newDur);
 
         // Patch vào lichTrinhTheoNgay
+        // Reset ghi_chu và travel_tips theo địa điểm mới (fix: tránh giữ nội dung cũ)
+        let newGhiChu = `Địa điểm: ${chosen.ten_dia_diem}` +
+          (chosen.dia_chi ? ` — ${chosen.dia_chi}` : '');
+        let newTips = chosen.loai_dia_diem
+          ? `Loại hình: ${chosen.loai_dia_diem}. Vui lòng tham khảo thêm thông tin tại địa điểm.`
+          : '';
+
+        try {
+          const weatherInfo = this.getWeatherAtTime(dayIdx, gioBatDau);
+          this.$toast?.info(`Đang tải mẹo AI cho "${chosen.ten_dia_diem}"...`);
+          
+          const aiRes = await api.post('/client/ai/generate-place-tips', {
+            ten_dia_diem: chosen.ten_dia_diem,
+            loai_dia_diem: chosen.loai_dia_diem,
+            dia_chi: chosen.dia_chi,
+            gio_bat_dau: gioBatDau,
+            thoi_tiet: weatherInfo ? weatherInfo.label : ''
+          });
+          
+          if (aiRes.data && aiRes.data.ghi_chu) {
+            newGhiChu = aiRes.data.ghi_chu;
+            newTips = aiRes.data.travel_tips || newTips;
+          }
+        } catch (aiErr) {
+          console.warn("AI Tips lỗi (dùng mặc định):", aiErr);
+        }
+
         this.lichTrinhTheoNgay[dayIdx].splice(itemIdx, 1, {
           ...item,
           id_dia_diem:     chosen.id,
@@ -873,6 +909,8 @@ export default {
           gio:             gioBatDau,
           gio_ket_thuc:    gioKetThuc,
           thoi_gian_tham_quan_du_kien: chosen.thoi_gian_tham_quan_du_kien,
+          ghi_chu:         newGhiChu,
+          travel_tips:     newTips,
         });
 
         // Đồng bộ selectedDiaDiem (Bước 2)

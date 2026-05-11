@@ -174,14 +174,14 @@
                     </div>
                   </div>
                   <div v-if="item.ghi_chu" class="tc-note mt-3 p-2 rounded" style="background: #f8fafc; border: 1px dashed #cbd5e1; font-size: 0.85rem; color: #475569;">
-                    <i class="bi bi-pencil-square me-1"></i><span style="font-style: italic;">{{ item.ghi_chu }}</span>
+                    <i class="bi bi-pencil-square me-1"></i><span style="font-style: italic; white-space: pre-line; word-break: break-word;">{{ item.ghi_chu }}</span>
                   </div>
                   <div class="tc-tips mt-2 p-2 rounded"
                     style="background: #fff8e1; border-left: 3px solid #ffc107;">
                     <small class="d-block mb-1 font-weight-bold" style="color: #856404;">
                       <i class="bi bi-lightbulb-fill me-1"></i>Gợi ý chuyên gia:
                     </small>
-                    <span style="font-size: 0.85rem; color: #555;">
+                    <span style="font-size: 0.85rem; color: #555; white-space: pre-line; word-break: break-word;">
                       {{ item.travel_tips || 'Nên mang theo kem chống nắng, nước uống và sạc dự phòng để có trải nghiệm tốt nhất tại đây.' }}
                     </span>
                   </div>
