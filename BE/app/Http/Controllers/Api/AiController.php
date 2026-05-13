@@ -109,6 +109,201 @@ class AiController extends Controller
         return $res;
     }
 
+    /**
+     * Tái tối ưu lịch trình dựa trên chi phí thực tế (Tầng 2 + Tầng 3).
+     * API trả về preview lịch trình mới — KHÔNG lưu DB ngay.
+     * Người dùng xác nhận ở bước tiếp theo.
+     */
+    public function reOptimizeWithBudget(Request $request, $id)
+    {
+        set_time_limit(180);
+
+        $chuyenDi = \App\Models\ChuyenDi::find($id);
+        if (!$chuyenDi) {
+            return response()->json(['status' => 'error', 'message' => 'Không tìm thấy chuyến đi.'], 404);
+        }
+
+        // ── Tầng 2: Tính ngân sách thực còn lại ───────────────────────────
+        $nganSachGoc = (float)$chuyenDi->ngan_sach;
+        $soNgay      = (int)$chuyenDi->so_ngay;
+        $soNguoi     = (int)($chuyenDi->so_nguoi ?? 1);
+        $startDate   = $chuyenDi->ngay_bat_dau;
+
+        // Lấy lịch trình đã có
+        $allSlots = \App\Models\LichTrinhDiaDiem::where('id_chuyen_di', $id)->get();
+
+        // Ngày đã đi (trước hôm nay hoặc user chỉ định)
+        $reOptimizeFromDay = max(0, (int)$request->input('from_day', 1)); // 1-indexed
+        $today = date('Y-m-d');
+
+        // Tính chi phí ước tính các ngày đã đi (từ gia_ve địa điểm × soNguoi)
+        $estimatedSpentDaysBefore = 0;
+        $usedIds = [];
+        $daysRemaining = 0;
+        $newStartDate = $startDate;
+
+        foreach ($allSlots as $slot) {
+            // ✅ FIX: Dùng thu_tu_tham_quan để xác định ngày (không dùng thoi_gian vì thường là null)
+            // Slot ngày N có thu_tu_tham_quan = (N-1)*100 + pos + 1
+            // → dayNumber (1-indexed) = floor((thu_tu - 1) / 100) + 1
+            $thuTu = (int)($slot->thu_tu_tham_quan ?? 0);
+            $slotDayNumber = $thuTu > 0 ? (int)(floor(($thuTu - 1) / 100) + 1) : 1;
+
+            $isBeforeReOptimizeDay = $slotDayNumber < $reOptimizeFromDay;
+
+            if ($isBeforeReOptimizeDay) {
+                // Ngày đã đi: cộng chi phí ước tính + lưu usedIds
+                $diaDiem = $slot->id_dia_diem ? \App\Models\DiaDiem::find($slot->id_dia_diem) : null;
+                if ($diaDiem) {
+                    $estimatedSpentDaysBefore += (float)$diaDiem->gia_ve * $soNguoi;
+                    $usedIds[] = $slot->id_dia_diem;
+                }
+            }
+        }
+
+        // Ngày bắt đầu tái tối ưu
+        $reOptimizeStartDate = date('Y-m-d', strtotime($startDate . ' +' . ($reOptimizeFromDay - 1) . ' days'));
+        $daysRemaining = $soNgay - $reOptimizeFromDay + 1;
+
+        if ($daysRemaining <= 0) {
+            return response()->json(['status' => 'error', 'message' => 'Không còn ngày nào để tái tối ưu.'], 400);
+        }
+
+        // Lấy chi phí phát sinh thực tế
+        $chiPhis = \App\Models\ChiPhiPhatSinh::where('id_chuyen_di', $id)->get()->toArray();
+
+        // ── Tầng 3: Phân tích spending profile ────────────────────────────
+        $spendingProfile = \App\Services\RecommendationService::analyzeSpendingProfile(
+            $chiPhis,
+            $nganSachGoc,
+            $estimatedSpentDaysBefore
+        );
+
+        // Tổng chi phí phát sinh
+        $totalIncurred = $spendingProfile['total_incurred'];
+
+        // Ngân sách thực còn lại = Gốc - Đã dùng (ước tính) - Phát sinh
+        // Giữ nguyên số âm để getRecommendedItineraryReOptimize biết đang vượt ngân sách thực
+        $remainingBudgetRaw  = $nganSachGoc - $estimatedSpentDaysBefore - $totalIncurred;
+        $remainingBudget     = $remainingBudgetRaw; // Có thể âm
+
+        // ── Override spending profile khi ngân sách cạn hoặc âm ──────────────
+        if ($remainingBudget <= 0) {
+            $spendingProfile['budget_mode']    = true;
+            $spendingProfile['force_free_only'] = true;
+            $spendingProfile['is_over_budget']  = true;
+            Log::info('[reOptimizeWithBudget] Ngân sách cạn hoặc âm → bật FREE-ONLY', [
+                'remaining_raw' => $remainingBudgetRaw
+            ]);
+        } elseif ($remainingBudget < ($nganSachGoc * 0.10)) {
+            // Dưới 10% ngân sách gốc → bật budget_mode
+            $spendingProfile['budget_mode']   = true;
+            $spendingProfile['is_over_budget'] = true;
+        }
+
+        Log::info('[reOptimizeWithBudget]', [
+            'id'                      => $id,
+            'ngan_sach_goc'           => $nganSachGoc,
+            'estimated_spent'         => $estimatedSpentDaysBefore,
+            'total_incurred'          => $totalIncurred,
+            'remaining_budget'        => $remainingBudget,
+            'days_remaining'          => $daysRemaining,
+            're_optimize_start'       => $reOptimizeStartDate,
+            'spending_profile'        => $spendingProfile,
+        ]);
+
+        // Lấy sở thích từ ghi chú chuyến đi
+        $notes = $chuyenDi->chu_thich ?? '';
+        $preferences = $this->extractPreferences($notes);
+
+        // Gọi thuật toán tái tối ưu
+        $newItinerary = $this->recommendationService->getRecommendedItineraryReOptimize(
+            $preferences,
+            $daysRemaining,
+            $remainingBudget,
+            $soNguoi,
+            $reOptimizeStartDate,
+            array_unique($usedIds),
+            $spendingProfile,
+            $request->input('weather_data', [])
+        );
+
+        return response()->json([
+            'status'                  => 'success',
+            'message'                 => 'Tái tối ưu thành công. Vui lòng xác nhận để áp dụng.',
+            'data'                    => $newItinerary,
+            'spending_profile'        => $spendingProfile,
+            'remaining_budget'        => $remainingBudget,
+            'days_remaining'          => $daysRemaining,
+            'from_day'                => $reOptimizeFromDay,
+            'start_date'              => $reOptimizeStartDate,
+            'estimated_spent_before'  => $estimatedSpentDaysBefore,
+            'total_incurred'          => $totalIncurred,
+            'days_kept'               => $reOptimizeFromDay - 1, // Số ngày giữ nguyên
+        ]);
+    }
+
+    /**
+     * Xác nhận áp dụng lịch trình mới từ re-optimize vào database.
+     */
+    public function confirmReOptimize(Request $request, $id)
+    {
+        $chuyenDi = \App\Models\ChuyenDi::find($id);
+        if (!$chuyenDi) {
+            return response()->json(['status' => 'error', 'message' => 'Không tìm thấy chuyến đi.'], 404);
+        }
+
+        $fromDay     = (int)$request->input('from_day', 1);
+        $newItinerary = $request->input('itinerary', []);
+
+        if (empty($newItinerary)) {
+            return response()->json(['status' => 'error', 'message' => 'Lịch trình mới trống.'], 400);
+        }
+
+        $startDate = $chuyenDi->ngay_bat_dau;
+
+        // ✅ FIX: Xóa bằng thu_tu_tham_quan (luôn có giá trị), KHÔNG dùng thoi_gian (thường là null)
+        // Slot thuộc ngày N có thu_tu_tham_quan = (N-1)*100 + vị_trí_trong_ngày + 1
+        // → Ngày from_day trở đi có thu_tu_tham_quan >= (fromDay - 1) * 100 + 1
+        $minThuTu = ($fromDay - 1) * 100 + 1;
+        $deleted = \App\Models\LichTrinhDiaDiem::where('id_chuyen_di', $id)
+            ->where('thu_tu_tham_quan', '>=', $minThuTu)
+            ->delete();
+
+        Log::info('[confirmReOptimize] Đã xóa slot cũ', ['deleted_count' => $deleted, 'min_thu_tu' => $minThuTu]);
+
+        // Chèn lịch trình mới
+        $dayOffset = $fromDay - 1;
+        foreach ($newItinerary as $dayIdx => $daySlots) {
+            $actualDate = date('Y-m-d', strtotime($startDate . ' +' . ($dayOffset + $dayIdx) . ' days'));
+            foreach ($daySlots as $order => $slot) {
+                $idDiaDiem = is_numeric($slot['id_dia_diem'] ?? null) ? (int)$slot['id_dia_diem'] : null;
+                \App\Models\LichTrinhDiaDiem::create([
+                    'id_chuyen_di'     => $id,
+                    'id_dia_diem'      => $idDiaDiem,
+                    'thu_tu_tham_quan' => ($dayOffset + $dayIdx) * 100 + $order + 1,
+                    'thoi_gian'        => $actualDate,
+                    'gio_bat_dau'      => $slot['gio_bat_dau'] ?? $slot['gio'] ?? null,
+                    'gio_ket_thuc'     => $slot['gio_ket_thuc'] ?? null,
+                    'thoi_luong_phut'  => $slot['thoi_luong_phut'] ?? null,
+                    'chi_phi_du_kien'  => ($slot['gia_ve'] ?? 0) * ($chuyenDi->so_nguoi ?? 1),
+                    'ghi_chu'          => $slot['ghi_chu'] ?? null,
+                ]);
+            }
+        }
+
+        Log::info('[confirmReOptimize] Đã áp dụng lịch trình tái tối ưu', [
+            'id_chuyen_di' => $id,
+            'from_day'     => $fromDay,
+            'days_added'   => count($newItinerary),
+        ]);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Đã áp dụng lịch trình tái tối ưu thành công!',
+        ]);
+    }
+
     public function generatePlaceTips(Request $request)
     {
         $request->validate([

@@ -35,12 +35,14 @@
             <button class="btn btn-outline-primary rounded-pill px-3 py-2 fw-bold d-flex align-items-center" @click="exportPDF">
               <i class="bi bi-file-earmark-pdf-fill me-2"></i> Xuất PDF
             </button>
-            <!-- AI Optimization Button -->
-            <button v-if="!isFinalized && (trip.is_member || trip.is_owner)" 
-              class="btn btn-outline-dark rounded-pill px-3 py-2 fw-bold d-flex align-items-center" 
-              @click="reorderWithAi" 
-              :disabled="loadingAI">
-              <i v-if="loadingAI" class="spinner-border spinner-border-sm me-2"></i>
+            <!-- AI Tối ưu lại (tái tối ưu ngân sách) -->
+            <button v-if="!isFinalized && (trip.is_member || trip.is_owner)"
+              class="btn btn-outline-dark rounded-pill px-3 py-2 fw-bold d-flex align-items-center"
+              @click="reOptimizeWithBudget"
+              :disabled="loadingReOptimize"
+              id="btn-ai-re-optimize-budget"
+              title="AI tối ưu lại lịch trình dựa trên chi phí thực tế">
+              <span v-if="loadingReOptimize" class="spinner-border spinner-border-sm me-2"></span>
               <i v-else class="bi bi-robot me-2 text-primary"></i>
               AI Tối ưu lại
             </button>
@@ -173,8 +175,30 @@
                       </button>
                     </div>
                   </div>
-                  <div v-if="item.ghi_chu" class="tc-note mt-3 p-2 rounded" style="background: #f8fafc; border: 1px dashed #cbd5e1; font-size: 0.85rem; color: #475569;">
-                    <i class="bi bi-pencil-square me-1"></i><span style="font-style: italic; white-space: pre-line; word-break: break-word;">{{ item.ghi_chu }}</span>
+                  <!-- Ghi chú: hiện textarea edit khi click, chỉ khi chưa chốt và là thành viên -->
+                  <div class="tc-note mt-3">
+                    <div v-if="!isFinalized && (trip.is_member || trip.is_owner)">
+                      <div v-if="editingNoteId !== item.id" class="d-flex align-items-start gap-2">
+                        <div class="flex-grow-1 p-2 rounded" style="background:#f8fafc;border:1px dashed #cbd5e1;font-size:0.85rem;color:#475569;min-height:32px;cursor:pointer;" @click="startEditNote(item)">
+                          <i class="bi bi-pencil-square me-1 text-muted"></i>
+                          <span v-if="item.ghi_chu" style="font-style:italic;white-space:pre-line;word-break:break-word;">{{ item.ghi_chu }}</span>
+                          <span v-else class="text-muted" style="font-style:italic;">Click để thêm ghi chú...</span>
+                        </div>
+                      </div>
+                      <div v-else class="mt-1">
+                        <textarea v-model="editingNoteText" class="form-control form-control-sm rounded-3" rows="2" style="font-size:0.85rem;" placeholder="Nhập ghi chú..." @keydown.esc="cancelEditNote"></textarea>
+                        <div class="d-flex gap-2 mt-1 justify-content-end">
+                          <button class="btn btn-sm btn-outline-secondary rounded-pill px-2 py-1" style="font-size:0.75rem;" @click="cancelEditNote">Hủy</button>
+                          <button class="btn btn-sm btn-success rounded-pill px-2 py-1" style="font-size:0.75rem;" @click="saveGhiChu(item)" :disabled="savingNote">
+                            <span v-if="savingNote" class="spinner-border spinner-border-sm"></span>
+                            <span v-else>Lưu</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div v-else-if="item.ghi_chu" class="p-2 rounded" style="background:#f8fafc;border:1px dashed #cbd5e1;font-size:0.85rem;color:#475569;">
+                      <i class="bi bi-pencil-square me-1"></i><span style="font-style:italic;white-space:pre-line;word-break:break-word;">{{ item.ghi_chu }}</span>
+                    </div>
                   </div>
                   <div class="tc-tips mt-2 p-2 rounded"
                     style="background: #fff8e1; border-left: 3px solid #ffc107;">
@@ -314,7 +338,7 @@
                     <button class="btn btn-sm btn-light border-0" data-bs-toggle="dropdown"><i class="bi bi-three-dots-vertical"></i></button>
                     <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
                       <li><a class="dropdown-item" href="#" @click.prevent="openExpenseModal(exp)"><i class="bi bi-pencil me-2 text-primary"></i>Sửa</a></li>
-                      <li><a class="dropdown-item text-danger" href="#" @click.prevent="deleteExpense(exp.id)"><i class="bi bi-trash me-2"></i>Xóa</a></li>
+                      <li><a class="dropdown-item text-danger" href="#" @click.prevent="confirmDeleteExpense(exp)"><i class="bi bi-trash me-2"></i>Xóa</a></li>
                     </ul>
                   </div>
                 </div>
@@ -348,6 +372,27 @@
           <button class="schedule-confirm-submit danger" @click="doRemovePlace" :disabled="removePlaceModal.removing">
             <span v-if="removePlaceModal.removing" class="spinner-border spinner-border-sm me-1"></span>
             Xóa địa điểm
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── Modal xác nhận xóa chi phí phát sinh ─── -->
+    <div v-if="deleteExpenseModal.show" class="schedule-confirm-overlay" @click.self="deleteExpenseModal.show = false">
+      <div class="schedule-confirm-box">
+        <button class="btn-close position-absolute top-0 end-0 m-4" @click="deleteExpenseModal.show = false"></button>
+        <div class="schedule-confirm-icon danger">
+          <i class="bi bi-trash3-fill"></i>
+        </div>
+        <h4 class="schedule-confirm-title">Xóa chi phí</h4>
+        <p class="schedule-confirm-message">
+          Bạn có chắc muốn xóa chi phí <strong>"{{ deleteExpenseModal.item?.noi_dung }}"</strong> này? Hành động này không thể hoàn tác.
+        </p>
+        <div class="schedule-confirm-actions">
+          <button class="schedule-confirm-cancel" @click="deleteExpenseModal.show = false">Hủy</button>
+          <button class="schedule-confirm-submit danger" @click="doDeleteExpense" :disabled="deleteExpenseModal.deleting">
+            <span v-if="deleteExpenseModal.deleting" class="spinner-border spinner-border-sm me-1"></span>
+            Xóa chi phí
           </button>
         </div>
       </div>
@@ -437,6 +482,86 @@
             {{ submittingExpense ? 'Đang lưu...' : 'Lưu lại' }}
           </button>
         </form>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════
+         MODAL SO SÁNH LỊCH TRÌNH TÁI TỐI ƯU
+         ═══════════════════════════════════════════ -->
+    <div v-if="reOptimizeModal.show" class="share-modal-overlay d-flex align-items-center justify-content-center" style="z-index: 1060;" @click.self="reOptimizeModal.show = false">
+      <div class="bg-white rounded-4 shadow-lg w-100 animate-in position-relative" style="max-width: 860px; max-height: 90vh; overflow-y: auto; padding: 2rem;">
+        <button class="btn-close position-absolute top-0 end-0 m-4" @click="reOptimizeModal.show = false"></button>
+
+        <div class="mb-3">
+          <h4 class="fw-bold"><i class="bi bi-robot me-2 text-primary"></i>Kết Quả Tái Tối Ưu Lịch Trình</h4>
+          <p class="text-muted mb-0">AI đã phân tích hành vi chi tiêu và tạo lịch trình mới. Xem trước rồi xác nhận để áp dụng.</p>
+        </div>
+
+        <!-- Thông tin ngày giữ lại vs tái tối ưu -->
+        <div class="alert mb-3 d-flex gap-3 align-items-center" style="background:#eff6ff; border:1.5px solid #bfdbfe; border-radius:12px; padding:0.85rem 1.1rem;">
+          <i class="bi bi-info-circle-fill text-primary fs-5 flex-shrink-0"></i>
+          <div style="font-size:0.88rem; line-height:1.6;">
+            <strong class="text-primary">Chiến lược tái tối ưu:</strong><br>
+            <span v-if="reOptimizeModal.fromDay > 1">
+              📌 <strong>Giữ nguyên</strong> lịch trình ngày 1 đến ngày {{ reOptimizeModal.fromDay - 1 }}
+              (theo chi phí phát sinh gần nhất)<br>
+            </span>
+            🔄 <strong>Tái tối ưu</strong> từ <span class="fw-bold text-success">ngày {{ reOptimizeModal.fromDay }}</span>
+            đến ngày {{ reOptimizeModal.fromDay + reOptimizeModal.daysRemaining - 1 }}
+            ({{ reOptimizeModal.daysRemaining }} ngày)
+          </div>
+        </div>
+
+        <!-- Spending Profile Badges -->
+        <div v-if="reOptimizeModal.spendingProfile" class="d-flex flex-wrap gap-2 mb-4">
+          <span class="badge py-2 px-3" :class="reOptimizeModal.spendingProfile.budget_mode ? 'bg-danger' : 'bg-success'" style="font-size:0.85rem;">
+            <i class="bi bi-wallet2 me-1"></i>Ngân sách còn lại: {{ formatCurrency(reOptimizeModal.remainingBudget) }}
+          </span>
+          <span v-if="reOptimizeModal.spendingProfile.budget_mode" class="badge bg-danger py-2 px-3" style="font-size:0.85rem;">
+            <i class="bi bi-exclamation-triangle me-1"></i>Chế độ Tiết Kiệm đã bật
+          </span>
+          <span v-if="reOptimizeModal.spendingProfile.food_ratio > 0.5" class="badge bg-warning text-dark py-2 px-3" style="font-size:0.85rem;">
+            <i class="bi bi-egg-fried me-1"></i>Ăn uống {{ Math.round(reOptimizeModal.spendingProfile.food_ratio * 100) }}% → AI ưu tiên quán rẻ
+          </span>
+          <span v-if="reOptimizeModal.spendingProfile.shopping_ratio > 0.3" class="badge bg-info text-dark py-2 px-3" style="font-size:0.85rem;">
+            <i class="bi bi-bag me-1"></i>Mua sắm {{ Math.round(reOptimizeModal.spendingProfile.shopping_ratio * 100) }}% → AI giảm ưu tiên địa điểm có vé
+          </span>
+          <span class="badge bg-secondary py-2 px-3" style="font-size:0.85rem;">
+            <i class="bi bi-calendar3 me-1"></i>Tái tối ưu {{ reOptimizeModal.daysRemaining }} ngày còn lại
+          </span>
+        </div>
+
+        <!-- New Itinerary Preview -->
+        <div v-if="reOptimizeModal.newItinerary && reOptimizeModal.newItinerary.length > 0">
+          <h5 class="fw-bold mb-3"><i class="bi bi-calendar-check me-2 text-success"></i>Lịch Trình Mới (Xem Trước)</h5>
+          <div v-for="(day, dayIdx) in reOptimizeModal.newItinerary" :key="dayIdx" class="mb-4 p-3 rounded-3" style="border:1px solid #e2e8f0; background:#f8fafc;">
+            <div class="fw-bold text-primary mb-3" style="font-size:0.95rem;">
+              <i class="bi bi-sun me-1"></i>Ngày {{ reOptimizeModal.fromDay + dayIdx }} — {{ formatReOptimizeDate(reOptimizeModal.startDate, dayIdx) }}
+            </div>
+            <div v-for="(slot, idx) in day" :key="idx" class="d-flex align-items-start gap-3 p-2 mb-2 rounded-3 bg-white" style="border:1px solid #e9ecef;">
+              <span class="badge bg-primary" style="min-width:55px; font-size:0.78rem; padding:5px 8px;">{{ slot.gio_bat_dau || slot.gio || '--:--' }}</span>
+              <div class="flex-grow-1">
+                <div class="fw-bold" style="font-size:0.88rem;">{{ slot.ten_dia_diem || 'Thời gian tự do' }}</div>
+                <div class="text-muted" style="font-size:0.76rem;">
+                  <span v-if="slot.loai_dia_diem" class="me-2"><i class="bi bi-tag me-1"></i>{{ slot.loai_dia_diem }}</span>
+                  <span v-if="slot.gia_ve > 0" class="text-danger"><i class="bi bi-ticket-perforated me-1"></i>{{ formatCurrency(slot.gia_ve) }}/người</span>
+                  <span v-else class="text-success"><i class="bi bi-check-circle me-1"></i>Miễn phí</span>
+                </div>
+              </div>
+              <span class="text-muted small">{{ slot.thoi_luong_phut || '--' }}p</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="d-flex gap-3 justify-content-end mt-4 pt-3 border-top">
+          <button class="btn btn-outline-secondary rounded-pill px-4" @click="reOptimizeModal.show = false">Giữ Lịch Trình Cũ</button>
+          <button class="btn rounded-pill px-4 fw-bold text-white" @click="confirmReOptimize" :disabled="confirmingReOptimize"
+            style="background: linear-gradient(135deg, #10b981, #0ea5e9); border:none;">
+            <span v-if="confirmingReOptimize" class="spinner-border spinner-border-sm me-2"></span>
+            <i v-else class="bi bi-check-circle me-2"></i>Áp Dụng Lịch Trình Mới
+          </button>
+        </div>
       </div>
     </div>
 
@@ -550,6 +675,11 @@ export default {
       expenseForm: { id: null, noi_dung: '', tong_chi_phi: '', loai_chi_phi: 'Khác', ngay_chi: '' },
       submittingExpense: false,
       expenseCategories: ['Ăn uống', 'Di chuyển', 'Chỗ ở', 'Vé tham quan', 'Mua sắm', 'Khác'],
+      deleteExpenseModal: {
+        show: false,
+        item: null,
+        deleting: false
+      },
 
       // Modal chia sẻ
       showShareModal: false,
@@ -609,6 +739,24 @@ export default {
       weatherForecast: [],
       weatherHourly: {}, // { 'YYYY-MM-DD': { 'HH': { icon, temp, label } } }
       loadingWeather: false,
+
+      // ─── AI Tái Tối Ưu Ngân Sách ───
+      loadingReOptimize: false,
+      confirmingReOptimize: false,
+      reOptimizeModal: {
+        show: false,
+        newItinerary: [],
+        spendingProfile: null,
+        remainingBudget: 0,
+        daysRemaining: 0,
+        fromDay: 1,
+        startDate: '',
+      },
+
+      // ─── Inline edit ghi chú ───
+      editingNoteId: null,   // id của LichTrinhDiaDiem đang edit
+      editingNoteText: '',
+      savingNote: false,
     };
   },
 
@@ -806,13 +954,20 @@ export default {
     async fetchTripData() {
       this.loading = true;
       try {
-        // Lấy chi tiết chuyến đi
-        const res = await api.get(`/chuyen-dis/${this.tripId}`);
+        // Dùng endpoint có auth để nhận is_leader (quyền sở hữu/nhóm)
+        const res = await api.get(`/client/chuyen-di/${this.tripId}`, {
+          headers: { Authorization: `Bearer ${this.token}` }
+        });
         const json = res.data;
-        
-        if (json.status === 'success' && json.data) {
+
+        if ((json.status === 'success' || json.status === true) && json.data) {
           this.trip = json.data;
-          if(!this.trip.so_ngay) this.trip.so_ngay = 1;
+          if (!this.trip.so_ngay) this.trip.so_ngay = 1;
+
+          // Map is_leader → is_owner & is_member để các v-if trong template hoạt động đúng
+          // kể cả khi truy cập qua link share trực tiếp
+          this.trip.is_owner  = !!this.trip.is_leader;
+          this.trip.is_member = !!this.trip.is_leader;
 
           // Lấy danh sách địa điểm theo chuyến đi
           const res2 = await api.get(`/chuyen-di/${this.tripId}/dia-diems`);
@@ -937,19 +1092,28 @@ export default {
       }
     },
 
-    async deleteExpense(id) {
-      if (!confirm("Bạn có chắc muốn xóa chi phí này?")) return;
+    confirmDeleteExpense(exp) {
+      this.deleteExpenseModal = { show: true, item: exp, deleting: false };
+    },
+
+    async doDeleteExpense() {
+      const id = this.deleteExpenseModal.item?.id;
+      if (!id) return;
+      this.deleteExpenseModal.deleting = true;
       try {
         const res = await api.delete(`/chi-phi-phat-sinhs/${id}`);
         const json = res.data;
         if (json.status === 'success') {
-          this.$toast.success("Xóa thành công");
+          this.$toast.success("Xóa chi phí thành công");
+          this.deleteExpenseModal.show = false;
           await this.fetchExpenses();
         } else {
           this.$toast.error("Xóa thất bại");
         }
       } catch (e) {
         this.$toast.error("Lỗi kết nối");
+      } finally {
+        this.deleteExpenseModal.deleting = false;
       }
     },
 
@@ -968,7 +1132,11 @@ export default {
     getFullAvatar(avatar) {
       if (!avatar) return '';
       if (avatar.startsWith('http')) return avatar;
-      return `${(import.meta.env.VITE_BACKEND_URL || '').replace(/\/+$/, '')}/storage/${avatar}`;
+      const baseUrl = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/+$/, '');
+      if (avatar.startsWith('/storage/')) {
+        return `${baseUrl}${avatar}`;
+      }
+      return `${baseUrl}/storage/${avatar.replace(/^\/+/, '')}`;
     },
 
     buildSchedule() {
@@ -1665,6 +1833,159 @@ export default {
         }
       };
       attempt();
+    },
+
+    // ─── AI Tái Tối Ưu Lịch Trình Dựa Trên Chi Phí ───────────────────────
+    async reOptimizeWithBudget() {
+      if (!this.trip) return;
+      this.loadingReOptimize = true;
+      try {
+        // Xác định from_day: ngày đầu tiên chưa qua (dựa trên ngày hôm nay)
+        const today = new Date().toISOString().slice(0, 10);
+        const startDate = String(this.trip.ngay_bat_dau).slice(0, 10);
+        const soNgay = this.trip.so_ngay || 1;
+
+        // ── Xác định from_day dựa trên ngày phát sinh chi phí gần nhất ──────
+        // Lấy ngày ngay_chi lớn nhất trong danh sách chi phí phát sinh
+        let latestExpenseDate = null;
+        if (this.incurredExpenses && this.incurredExpenses.length > 0) {
+          for (const exp of this.incurredExpenses) {
+            if (exp.ngay_chi) {
+              const d = String(exp.ngay_chi).slice(0, 10);
+              if (!latestExpenseDate || d > latestExpenseDate) {
+                latestExpenseDate = d;
+              }
+            }
+          }
+        }
+
+        let fromDay;
+        if (latestExpenseDate) {
+          // Tính ngày trip tương ứng với latestExpenseDate
+          const start = new Date(startDate);
+          const latest = new Date(latestExpenseDate);
+          const diffDays = Math.floor((latest - start) / (1000 * 60 * 60 * 24));
+          // from_day = ngày phát sinh gần nhất + 1 (tối ưu các ngày SAU đó)
+          fromDay = diffDays + 2; // +1 vì 0-indexed → 1-indexed, +1 nữa vì ngày KẾ TIẾP
+        } else {
+          // Fallback: dùng ngày hôm nay nếu không có chi phí phát sinh
+          const today = new Date().toISOString().slice(0, 10);
+          fromDay = 1;
+          for (let i = 0; i < soNgay; i++) {
+            const d = new Date(startDate);
+            d.setDate(d.getDate() + i);
+            if (d.toISOString().slice(0, 10) >= today) { fromDay = i + 1; break; }
+            fromDay = i + 2;
+          }
+        }
+
+        // Đảm bảo from_day hợp lệ
+        fromDay = Math.max(1, Math.min(fromDay, soNgay));
+
+        // Cảnh báo nếu không còn ngày nào để tối ưu
+        if (fromDay > soNgay) {
+          this.$toast.warning('Đã đến ngày cuối lịch trình, không còn ngày nào để tái tối ưu.');
+          return;
+        }
+
+        const res = await api.post(
+          `/client/ai/re-optimize-budget/${this.tripId}`,
+          { from_day: fromDay, latest_expense_date: latestExpenseDate },
+          { headers: { Authorization: `Bearer ${this.token}` } }
+        );
+
+        if (res.data.status === 'success') {
+          const d = res.data;
+          this.reOptimizeModal = {
+            show: true,
+            newItinerary: d.data || [],
+            spendingProfile: d.spending_profile,
+            remainingBudget: d.remaining_budget,
+            daysRemaining: d.days_remaining,
+            fromDay: d.from_day,
+            startDate: d.start_date,
+            daysKept: d.days_kept || 0,
+            latestExpenseDate,
+          };
+          // Toast thông tin
+          const keptMsg = d.days_kept > 0 ? `Giữ nguyên ${d.days_kept} ngày đầu. ` : '';
+          this.$toast.info(`${keptMsg}Tái tối ưu ${d.days_remaining} ngày còn lại từ ngày ${d.from_day}.`);
+        } else {
+          this.$toast.error(res.data.message || 'Không thể tái tối ưu lịch trình.');
+        }
+      } catch (err) {
+        console.error('[reOptimizeWithBudget]', err);
+        this.$toast.error('Có lỗi xảy ra khi tái tối ưu. Vui lòng thử lại.');
+      } finally {
+        this.loadingReOptimize = false;
+      }
+    },
+
+    async confirmReOptimize() {
+      this.confirmingReOptimize = true;
+      try {
+        const res = await api.post(
+          `/client/ai/confirm-re-optimize/${this.tripId}`,
+          {
+            from_day: this.reOptimizeModal.fromDay,
+            itinerary: this.reOptimizeModal.newItinerary,
+          },
+          { headers: { Authorization: `Bearer ${this.token}` } }
+        );
+
+        if (res.data.status === 'success') {
+          this.$toast.success('✅ Đã áp dụng lịch trình mới thành công!');
+          this.reOptimizeModal.show = false;
+          // Reload lại dữ liệu lịch trình
+          await this.fetchTripData();
+        } else {
+          this.$toast.error(res.data.message || 'Không thể áp dụng lịch trình mới.');
+        }
+      } catch (err) {
+        console.error('[confirmReOptimize]', err);
+        this.$toast.error('Có lỗi xảy ra khi áp dụng lịch trình.');
+      } finally {
+        this.confirmingReOptimize = false;
+      }
+    },
+
+    formatReOptimizeDate(startDate, dayOffset) {
+      if (!startDate) return '';
+      const d = new Date(startDate);
+      d.setDate(d.getDate() + dayOffset);
+      return d.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' });
+    },
+
+    // ─── Inline edit ghi chú địa điểm ────────────────────────────────────
+    startEditNote(item) {
+      this.editingNoteId   = item.id;
+      this.editingNoteText = item.ghi_chu || '';
+    },
+
+    cancelEditNote() {
+      this.editingNoteId   = null;
+      this.editingNoteText = '';
+    },
+
+    async saveGhiChu(item) {
+      if (this.savingNote) return;
+      this.savingNote = true;
+      try {
+        await api.put(
+          `/client/lich-trinh-dia-diem/${item.id}/ghi-chu`,
+          { ghi_chu: this.editingNoteText },
+          { headers: { Authorization: `Bearer ${this.token}` } }
+        );
+        // Cập nhật local ngay (không cần reload toàn bộ)
+        item.ghi_chu = this.editingNoteText;
+        this.cancelEditNote();
+        this.$toast.success('Đã lưu ghi chú!');
+      } catch (err) {
+        console.error('[saveGhiChu]', err);
+        this.$toast.error('Lỗi khi lưu ghi chú. Vui lòng thử lại.');
+      } finally {
+        this.savingNote = false;
+      }
     },
   },
 };

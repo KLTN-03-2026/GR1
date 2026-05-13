@@ -19,6 +19,9 @@ class RecommendationService
     private array $userPreferences = [];
     private float $dailyBudget = 0;
     private int $soNguoi = 1;
+    private array $spendingProfile = [];
+    /** Khi true: chỉ chọn địa điểm miễn phí (gia_ve = 0) hoặc thời gian tự do */
+    private bool $forceFreeOnly = false;
 
     /**
      * Entry point để lấy lịch trình.
@@ -40,10 +43,156 @@ class RecommendationService
         $this->userPreferences = $preferences;
         $this->soNguoi = max(1, $soNguoi);
         $this->dailyBudget = $days > 0 ? ($budget / $days) : 0;
+        $this->spendingProfile = [];
 
         $places = $this->fetchCandidatePlaces($preferences);
 
         return $this->buildSchedule($places, $days, $startDate, $weatherData);
+    }
+
+    /**
+     * Entry point dành cho Tái Tối Ưu Lịch Trình dựa trên chi phí thực tế.
+     * - Loại trừ địa điểm đã đi (usedIds)
+     * - Áp dụng spending profile để điều chỉnh trọng số calculateScore()
+     *
+     * @param array $preferences   Sở thích người dùng (giữ nguyên từ lịch trình gốc)
+     * @param int $days            Số ngày còn lại chưa đi
+     * @param float $budget        Ngân sách thực còn lại
+     * @param int $soNguoi         Số người
+     * @param string $startDate    Ngày bắt đầu tái tối ưu
+     * @param array $usedIds       Danh sách id địa điểm đã đi rồi (để loại trừ)
+     * @param array $spendingProfile Kết quả từ analyzeSpendingProfile()
+     * @param array $weatherData   Dữ liệu thời tiết
+     * @return array Lịch trình mới
+     */
+    public function getRecommendedItineraryReOptimize(
+        array $preferences,
+        int $days,
+        float $budget,
+        int $soNguoi,
+        string $startDate,
+        array $usedIds = [],
+        array $spendingProfile = [],
+        array $weatherData = []
+    ): array {
+        Log::info('RecommendationService: Tái Tối Ưu Lịch Trình (Budget Re-Optimize)', [
+            'days'             => $days,
+            'budget'           => $budget,
+            'so_nguoi'         => $soNguoi,
+            'usedIds_count'    => count($usedIds),
+            'spending_profile' => $spendingProfile,
+        ]);
+
+        $this->userPreferences = $preferences;
+        $this->soNguoi         = max(1, $soNguoi);
+        $this->spendingProfile = $spendingProfile;
+        $this->forceFreeOnly   = false;
+
+        // ─── Xác định chế độ ngân sách dựa trên ngân sách còn lại ────────────────
+        if ($budget <= 0) {
+            // Không còn ngân sách: chỉ chọn địa điểm miễn phí
+            $this->forceFreeOnly             = true;
+            $this->spendingProfile['budget_mode']    = true;
+            $this->spendingProfile['force_free_only'] = true;
+            $effectiveBudget = 0;
+            Log::info('[ReOptimize] Ngân sách đã cạn — bật FREE-ONLY mode');
+        } elseif (!empty($spendingProfile['budget_mode'])) {
+            // Vượt budget > 20%: giảm mạnh ngân sách còn lại xuống 50%
+            $effectiveBudget = $budget * 0.5;
+            Log::info('[ReOptimize] Budget mode ON — hiệu lực 50% ngân sách còn lại', [
+                'original' => $budget, 'effective' => $effectiveBudget
+            ]);
+        } elseif (!empty($spendingProfile['is_over_budget'])) {
+            // Vượt budget nhẹ (< 20%): giảm xuống 70%
+            $effectiveBudget = $budget * 0.7;
+            Log::info('[ReOptimize] Over budget (nhẹ) — hiệu lực 70% ngân sách còn lại', [
+                'original' => $budget, 'effective' => $effectiveBudget
+            ]);
+        } else {
+            // Bình thưỜng: dùng đầy đủ ngân sách còn lại
+            $effectiveBudget = $budget;
+        }
+
+        // Kể cả khi effectiveBudget = 0, vẫn đặt dailyBudget = 1 để logic filter vẫn hoạt động
+        $this->dailyBudget = $days > 0
+            ? max($this->forceFreeOnly ? 0.01 : 0, $effectiveBudget / $days)
+            : 0.01; // Tạo giá trị nhỏ dương để filter không bị skip
+
+        $places = $this->fetchCandidatePlaces($preferences);
+
+        // Loại trừ địa điểm đã đi
+        if (!empty($usedIds)) {
+            $places = $places->reject(fn($p) => in_array($p->id, $usedIds));
+        }
+
+        // FREE-ONLY mode: loại trừ toàn bộ địa điểm có vé trước khi chạy thuật toán
+        if ($this->forceFreeOnly) {
+            $places = $places->filter(fn($p) => ($p->gia_ve ?? 0) == 0);
+            Log::info('[ReOptimize] FREE-ONLY: chỉ còn ' . $places->count() . ' địa điểm miễn phí');
+        }
+
+        return $this->buildSchedule($places, $days, $startDate, $weatherData);
+    }
+
+    /**
+     * Phân tích hành vi chi tiêu từ danh sách chi phí phát sinh.
+     * Trả về spending_profile để điều chỉnh trọng số calculateScore().
+     *
+     * @param array $chiPhis Mảng chi_phi_phat_sinhs dạng [{ loai_chi_phi, tong_chi_phi }, ...]
+     * @return array spending_profile
+     */
+    public static function analyzeSpendingProfile(array $chiPhis, float $originalBudget, float $estimatedSpent): array
+    {
+        if (empty($chiPhis)) {
+            return [
+                'food_ratio'            => 0,
+                'shopping_ratio'        => 0,
+                'is_over_budget'        => false,
+                'budget_mode'           => false,
+                'total_incurred'        => 0,
+            ];
+        }
+
+        $total         = 0;
+        $foodTotal     = 0;
+        $shoppingTotal = 0;
+
+        foreach ($chiPhis as $cp) {
+            $amount = (float)($cp['tong_chi_phi'] ?? 0);
+            $total += $amount;
+            $loai   = mb_strtolower((string)($cp['loai_chi_phi'] ?? ''));
+
+            if (in_array($loai, ['ăn uống', 'an uong'])) {
+                $foodTotal += $amount;
+            } elseif (in_array($loai, ['mua sắm', 'mua sam'])) {
+                $shoppingTotal += $amount;
+            }
+        }
+
+        $foodRatio     = $total > 0 ? round($foodTotal / $total, 2) : 0;
+        $shoppingRatio = $total > 0 ? round($shoppingTotal / $total, 2) : 0;
+
+        // Tổng chi tiêu (ước tính + phát sinh) vs ngân sách gốc
+        $totalSpent    = $estimatedSpent + $total;
+        $isOverBudget  = $originalBudget > 0 && $totalSpent > $originalBudget;
+        // Budget mode khi vượt > 10% (giảm ngưỡng từ 20% xuống 10% để nhạy hơn)
+        $budgetMode    = $originalBudget > 0 && $totalSpent > ($originalBudget * 1.1);
+
+        Log::info('[analyzeSpendingProfile]', [
+            'total_incurred'  => $total,
+            'food_ratio'      => $foodRatio,
+            'shopping_ratio'  => $shoppingRatio,
+            'is_over_budget'  => $isOverBudget,
+            'budget_mode'     => $budgetMode,
+        ]);
+
+        return [
+            'food_ratio'     => $foodRatio,
+            'shopping_ratio' => $shoppingRatio,
+            'is_over_budget' => $isOverBudget,
+            'budget_mode'    => $budgetMode,
+            'total_incurred' => $total,
+        ];
     }
 
     /**
@@ -502,6 +651,11 @@ class RecommendationService
                 if (in_array($place->id, $usedIds)) continue;
 
                 $giaVe = $place->gia_ve ?? 0;
+
+                // ✅ HARD FILTER: forceFreeOnly — bỏ qua toàn bộ địa điểm có vé, dù calculateScore có chạy
+                if ($this->forceFreeOnly && $giaVe > 0) continue;
+
+                // Filter ngân sách bình thường: bỏ qua địa điểm vượt ngân sách ngày
                 if ($this->dailyBudget > 0 && $giaVe > $maxAcceptableTicketPerPerson) continue;
 
                 // Giới hạn khoảng cách trong pass này (so với currentLat)
@@ -558,6 +712,44 @@ class RecommendationService
         $score = 0;
 
         // Gom toàn bộ text để search keyword
+        // [Tầng 3 - Spending Profile] Áp dụng trước khi scoring chính
+        $giaVeCheck  = (float)($place->gia_ve ?? 0);
+        $foodRatio   = $this->spendingProfile['food_ratio']    ?? 0;
+        $shopRatio   = $this->spendingProfile['shopping_ratio'] ?? 0;
+        $budgetMode  = $this->spendingProfile['budget_mode']   ?? false;
+        $metaCheck   = mb_strtolower($place->loai_dia_diem . ' ' . $place->ten_dia_diem . ' ' . $place->mo_ta);
+
+        // Budget Mode: không chọn bất kỳ địa điểm nào có vé (kể cả vé nhỏ)
+        if ($budgetMode && $giaVeCheck > 0) {
+            return -9999; // Chế độ tiết kiệm: chỉ chọn địa điểm miễn phí
+        }
+
+        // Chi ăn uống > 50%: tăng penalty cho nhà hàng đắt, thưởng street food
+        if ($foodRatio > 0.50) {
+            if ($giaVeCheck > 200000 && (
+                mb_strpos($metaCheck, 'nhà hàng') !== false ||
+                mb_strpos($metaCheck, 'hải sản') !== false
+            )) {
+                $score -= 25; // Phạt nhà hàng đắt khi đã chi nhiều cho ăn uống
+            }
+            if (
+                mb_strpos($metaCheck, 'street food') !== false ||
+                mb_strpos($metaCheck, 'quán ăn') !== false ||
+                mb_strpos($metaCheck, 'bình dân') !== false ||
+                mb_strpos($metaCheck, 'chay') !== false
+            ) {
+                $score += 20; // Thưởng quán bình dân khi chi ăn nhiều
+            }
+        }
+
+        // Chi mua sắm > 30%: giảm điểm địa điểm có vé, thưởng miễn phí
+        if ($shopRatio > 0.30) {
+            if ($giaVeCheck > 0) {
+                $score -= 20; // Phạt địa điểm có vé khi đã chi nhiều cho mua sắm
+            } else {
+                $score += 15; // Thưởng thêm địa điểm miễn phí
+            }
+        }
         $metadata = mb_strtolower($place->loai_dia_diem . ' ' . $place->mo_ta . ' ' . $place->ten_dia_diem);
 
         // ============ PHẦN 1: KIỂM TRA LUẬT CẤM TUYỆT ĐỐI ============
