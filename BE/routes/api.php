@@ -95,7 +95,14 @@ Route::prefix('client')->group(function () {
         Route::post('/generate-itinerary', [\App\Http\Controllers\Api\AiController::class, 'generateItinerary']);
         Route::post('/reorder-itinerary/{id}', [\App\Http\Controllers\Api\AiController::class, 'reorderWithAi']);
         Route::post('/generate-place-tips', [\App\Http\Controllers\Api\AiController::class, 'generatePlaceTips']);
+        // Tái tối ưu lịch trình dựa trên chi phí thực tế
+        Route::post('/re-optimize-budget/{id}', [\App\Http\Controllers\Api\AiController::class, 'reOptimizeWithBudget']);
+        Route::post('/confirm-re-optimize/{id}', [\App\Http\Controllers\Api\AiController::class, 'confirmReOptimize']);
     });
+
+    // Cập nhật ghi chú địa điểm trong lịch trình (inline edit)
+    Route::put('/lich-trinh-dia-diem/{id}/ghi-chu', [\App\Http\Controllers\Api\LichTrinhDiaDiemController::class, 'updateGhiChu'])
+        ->middleware('auth:sanctum');
 
     // Đánh giá hệ thống (Client gửi sau khi lưu lịch trình – không bắt buộc đăng nhập)
     Route::post('/danh-gia-he-thong', [DanhGiaHeThongController::class, 'store']);

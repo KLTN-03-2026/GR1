@@ -290,4 +290,47 @@ class LichTrinhDiaDiemController extends Controller
             'message' => 'Cập nhật thứ tự thành công.'
         ]);
     }
+
+    /**
+     * Cập nhật chỉ trường ghi_chu (client inline edit).
+     * Kiểm tra quyền: user phải là chủ chuyến đi hoặc thành viên nhóm.
+     */
+    public function updateGhiChu(Request $request, $id)
+    {
+        $userId   = auth('sanctum')->id();
+        $lichTrinh = LichTrinhDiaDiem::find($id);
+
+        if (!$lichTrinh) {
+            return response()->json(['status' => 'error', 'message' => 'Không tìm thấy bản ghi.'], 404);
+        }
+
+        // Kiểm tra quyền qua chuyến đi
+        $chuyenDi = \App\Models\ChuyenDi::find($lichTrinh->id_chuyen_di);
+        if (!$chuyenDi) {
+            return response()->json(['status' => 'error', 'message' => 'Chuyến đi không tồn tại.'], 404);
+        }
+
+        $canEdit = false;
+        if ($userId && $chuyenDi->id_nguoi_dung == $userId) {
+            $canEdit = true; // Chủ sở hữu chuyến đi
+        } elseif ($userId && $chuyenDi->id_nhom_du_lich) {
+            // Thành viên nhóm cũng được sửa
+            $isMember = \App\Models\ChiTietNhom::where('id_nguoi_dung', $userId)
+                ->where('id_nhom_du_lich', $chuyenDi->id_nhom_du_lich)
+                ->exists();
+            $canEdit = $isMember;
+        }
+
+        if (!$canEdit) {
+            return response()->json(['status' => 'error', 'message' => 'Bạn không có quyền chỉnh sửa ghi chú này.'], 403);
+        }
+
+        $lichTrinh->ghi_chu = $request->input('ghi_chu', '');
+        $lichTrinh->save();
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => 'Đã cập nhật ghi chú thành công.',
+        ]);
+    }
 }
